@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JaggerySim — Heat-Pump Jaggery Plant Process Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0E1116; --console:#161A21; --console-2:#1E242D; --console-3:#2A323D;
+  --edge:#333C48; --rule:#333C4880; --muted:#8B98A8; --dim:#616C7B;
+  --sheet:#F4F3EE; --sheet-2:#E6E5DD; --sheet-ink:#191C18;
+  --juice:#2E7D32; --product:#8D5524; --vapour:#6B7280; --cond:#1E6FB8;
+  --hot:#C62828; --cold:#0288D1; --ctrl:#6A3FA0;
+  --ok:#1FA37F; --warn:#D68A1E; --bad:#D9534F;
+  --ui:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  --cw:430px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--ink);color:#E3E8EF;font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+
+.shell{display:flex;min-height:100vh}
+.console{width:var(--cw);flex:0 0 var(--cw);background:var(--console);border-right:1px solid var(--edge);
+  height:100vh;position:sticky;top:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#39434F var(--console)}
+.console::-webkit-scrollbar{width:9px}
+.console::-webkit-scrollbar-thumb{background:#39434F;border-radius:9px;border:2px solid var(--console)}
+.stage{flex:1;min-width:0;background:#090C10;padding:24px 24px 90px;display:flex;justify-content:center}
+
+.brand{padding:20px 22px 15px;border-bottom:1px solid var(--rule)}
+.brand h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.brand .sub{margin-top:4px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.brand .strip{display:flex;gap:3px;margin-top:11px}
+.brand .strip i{height:3px;flex:1;border-radius:2px}
+.brand .strip i:nth-child(1){background:var(--juice)}
+.brand .strip i:nth-child(2){background:var(--hot)}
+.brand .strip i:nth-child(3){background:var(--cold)}
+.brand .strip i:nth-child(4){background:var(--product)}
+
+/* ---- solver status / ledger ---- */
+.ledger{padding:14px 22px 18px;background:linear-gradient(180deg,#12171F,#161A21);border-bottom:1px solid var(--rule)}
+.status{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px #1FA37F26;flex:0 0 auto}
+.dot.bad{background:var(--bad);box-shadow:0 0 0 3px #D9534F26}
+.status .txt{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;color:var(--muted)}
+.spark{display:flex;align-items:flex-end;gap:2px;height:30px;margin-left:auto}
+.spark i{width:3px;background:var(--ok);border-radius:1px;opacity:.75;transition:height .3s ease}
+
+.readout{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rd{background:#0C1016;border:1px solid var(--edge);border-radius:7px;padding:9px 11px}
+.rd .k{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.rd .v{font-family:var(--mono);font-size:18px;font-weight:600;margin-top:2px;line-height:1.15;color:#F1F5F9}
+.rd .v small{font-size:10.5px;font-weight:400;color:var(--muted);margin-left:2px}
+.rd.acc .v{color:#39D3B0}
+
+.pwr{margin-top:12px}
+.pwr .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+.pwrbar{display:flex;height:12px;border-radius:3px;overflow:hidden;background:#0C1016;border:1px solid var(--edge)}
+.pwrbar i{transition:width .4s ease}
+.pwrkey{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:7px}
+.pwrkey span{font-family:var(--mono);font-size:9.5px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.pwrkey b{width:7px;height:7px;border-radius:2px;display:inline-block}
+
+.warns{margin-top:11px;display:grid;gap:6px}
+.wn{font-size:11px;line-height:1.45;background:#241C0C;border:1px solid #6B5220;color:#EFC880;border-radius:6px;padding:7px 9px}
+.wn.bad{background:#26120F;border-color:#6B2A24;color:#F0A79F}
+
+/* ---- sections ---- */
+.sec{border-bottom:1px solid var(--rule)}
+.sec>summary{list-style:none;cursor:pointer;padding:12px 22px;display:flex;align-items:center;gap:10px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);user-select:none}
+.sec>summary::-webkit-details-marker{display:none}
+.sec>summary:hover{color:#CBD5E1;background:#1A2029}
+.sec>summary .n{font-size:9px;color:var(--dim);border:1px solid var(--edge);border-radius:3px;padding:1px 5px}
+.sec>summary .chev{margin-left:auto;opacity:.5;transition:transform .18s}
+.sec[open]>summary .chev{transform:rotate(90deg)}
+.sec[open]>summary{color:#E3E8EF}
+.body{padding:4px 22px 18px}
+
+.field{margin-bottom:12px}
+.field>label,.lbl{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;font-weight:500}
+.hint{font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.45}
+input[type=text],input[type=number],select{width:100%;background:var(--ink);border:1px solid var(--edge);border-radius:6px;
+  padding:8px 10px;color:#F1F5F9;outline:none;transition:border-color .15s,box-shadow .15s}
+input[type=number]{font-family:var(--mono)}
+input:focus,select:focus{border-color:var(--ok);box-shadow:0 0 0 3px #1FA37F26}
+select{appearance:none;padding-right:28px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%238B98A8' stroke-width='1.6'><path d='M1 1l4 4 4-4'/></svg>");background-repeat:no-repeat;background-position:right 10px center}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.unit{position:relative}
+.unit .u{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;color:var(--dim);pointer-events:none}
+.unit input{padding-right:46px}
+.seg{display:flex;background:var(--ink);border:1px solid var(--edge);border-radius:6px;padding:2px;gap:2px}
+.seg button{flex:1;background:none;border:0;border-radius:4px;padding:6px 4px;cursor:pointer;font-size:11.5px;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--console-3);color:#F1F5F9;font-weight:600}
+.sw{display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0;user-select:none}
+.sw input{position:absolute;opacity:0;pointer-events:none}
+.sw .track{width:36px;height:20px;border-radius:20px;background:var(--console-3);border:1px solid var(--edge);position:relative;flex:0 0 auto;transition:background .18s}
+.sw .track::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:transform .18s,background .18s}
+.sw input:checked+.track{background:#1FA37F40;border-color:var(--ok)}
+.sw input:checked+.track::after{transform:translateX(16px);background:#39D3B0}
+.sw input:focus-visible+.track{box-shadow:0 0 0 3px #1FA37F33}
+.sw span.t{font-size:12px;color:#CBD5E1}
+
+.actions{padding:16px 22px 24px;display:grid;gap:8px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--edge);background:var(--console-2);
+  color:#E3E8EF;padding:10px 12px;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:500;transition:background .15s}
+.btn:hover{background:var(--console-3)}
+.btn.primary{background:var(--ok);border-color:var(--ok);color:#04211A;font-weight:600}
+.btn.primary:hover{background:#28BC92}
+.btn.ghost{background:none}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.foot{padding:0 22px 30px;font-size:10.5px;color:var(--dim);line-height:1.5}
+
+/* ---- sheet ---- */
+.sheet-wrap{width:100%;max-width:1240px}
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:13px;flex-wrap:wrap}
+.bar .t{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.bar .spacer{flex:1}
+.tabs{display:flex;gap:2px;background:var(--console);border:1px solid var(--edge);border-radius:7px;padding:2px}
+.tabs button{background:none;border:0;border-radius:5px;padding:6px 12px;cursor:pointer;font-size:11.5px;color:var(--muted)}
+.tabs button[aria-selected=true]{background:var(--console-3);color:#F1F5F9;font-weight:600}
+.sheet{background:var(--sheet);color:var(--sheet-ink);border-radius:3px;padding:34px 38px 46px;box-shadow:0 24px 60px #00000070}
+.sheet h2{font-size:15px;font-weight:700;margin:26px 0 8px;padding-bottom:5px;border-bottom:1.5px solid var(--sheet-ink);display:flex;gap:9px;align-items:baseline}
+.sheet h2:first-child{margin-top:0}
+.sheet h2 .no{font-family:var(--mono);font-size:11px;color:var(--ok)}
+.sheet h3{font-size:12.5px;font-weight:700;margin:16px 0 6px}
+.sheet p{margin:0 0 10px}
+.sheet .fine{font-size:11.5px;color:#5C6459;line-height:1.6}
+.sheet table{width:100%;border-collapse:collapse;margin:10px 0 14px;font-size:11.8px}
+.sheet th,.sheet td{border:1px solid #B9BDB2;padding:5px 8px;text-align:left;vertical-align:top}
+.sheet th{background:#E2E4DB;font-weight:700;font-size:11px}
+.sheet td.n,.sheet th.n{text-align:right;font-family:var(--mono);font-size:11.2px;white-space:nowrap}
+.sheet tr.total td{background:#E2E4DB;font-weight:700}
+.sheet tr.sub td{background:#EDEEE7}
+.sheet .callout{background:#E7EAE2;border-left:3px solid var(--ok);padding:11px 14px;margin:12px 0;font-size:12.5px}
+.sheet .callout .k{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5C6459;display:block;margin-bottom:4px}
+.sheet .callout.warn{border-left-color:var(--warn);background:#F2EDE1}
+.sheet .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 22px}
+.sheet .figure{margin:12px 0 4px;background:#FBFBF7;border:1px solid #C7CBC0;border-radius:4px;padding:14px 12px 8px}
+.sheet .figure svg{display:block;width:100%;height:auto}
+.sheet .figcap{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;color:#5C6459;margin:7px 0 14px;text-align:center}
+.sheet svg text{font-family:var(--ui);fill:var(--sheet-ink)}
+.sheet svg .st{font-size:10px}
+.sheet svg .sb{font-size:10px;font-weight:700}
+.sheet svg .sn{font-family:var(--mono);font-size:8.5px;fill:#6F776C;letter-spacing:.03em}
+.sheet svg .sv{font-family:var(--mono);font-size:8px;fill:#3D443B}
+.sheet svg .sh{font-family:var(--mono);font-size:8.5px;letter-spacing:.11em}
+.sheet svg .sl{font-size:9px;fill:#5C6459}
+.sheet svg .ax{font-family:var(--mono);font-size:8.5px;fill:#5C6459}
+.sheet svg .axl{font-size:9.5px;fill:#3D443B}
+
+@media (max-width:1180px){
+  .shell{flex-direction:column}
+  .console{width:100%;flex:none;height:auto;position:static;border-right:0;border-bottom:1px solid var(--edge)}
+  .stage{padding:14px 10px 80px}
+  .sheet{padding:22px 16px 30px}
+  .mtabs{display:flex !important;position:sticky;top:0;z-index:20;background:var(--ink);padding:8px 10px;gap:2px;border-bottom:1px solid var(--edge)}
+  body.v-cfg .stage{display:none}
+  body.v-out .console{display:none}
+}
+.mtabs{display:none}
+.mtabs button{flex:1;background:var(--console);border:1px solid var(--edge);border-radius:6px;padding:9px;cursor:pointer;font-size:12.5px;color:var(--muted)}
+.mtabs button[aria-pressed=true]{background:var(--console-3);color:#fff;font-weight:600}
+
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  body{background:#fff}
+  .console,.bar,.mtabs,.noprint{display:none !important}
+  .shell{display:block}
+  .stage,body.v-cfg .stage,body.v-out .stage{display:block !important;padding:0;background:#fff}
+  body.v-cfg .console,body.v-out .console{display:none !important}
+  .sheet-wrap{max-width:none}
+  .sheet{box-shadow:none;padding:0;background:#fff;font-size:9.6pt}
+  .sheet h2{page-break-after:avoid;font-size:11.5pt}
+  .sheet table,.sheet .figure,.sheet .callout{page-break-inside:avoid}
+  .sheet table{font-size:8.2pt}
+  .sheet .figure{background:#fff;border-color:#999}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body class="v-cfg">
+<div class="mtabs">
+  <button id="mtCfg" aria-pressed="true">Inputs</button>
+  <button id="mtOut" aria-pressed="false">Results</button>
+</div>
+<div class="shell">
+<aside class="console" id="console"></aside>
+<main class="stage">
+  <div class="sheet-wrap">
+    <div class="bar noprint">
+      <span class="t">Steady-state solution</span>
+      <span class="spacer"></span>
+      <div class="tabs" role="tablist" id="viewTabs">
+        <button role="tab" aria-selected="true" data-view="pfd">Flowsheet</button>
+        <button role="tab" aria-selected="false" data-view="streams">Stream table</button>
+        <button role="tab" aria-selected="false" data-view="energy">Energy &amp; economics</button>
+        <button role="tab" aria-selected="false" data-view="study">Parametric study</button>
+        <button role="tab" aria-selected="false" data-view="conv">Convergence &amp; balances</button>
+      </div>
+    </div>
+    <article class="sheet" id="sheet"></article>
+  </div>
+</main>
+</div>
+<script>
+/* ===== JaggerySim engine — steady-state sequential-modular solver ===== */
+const lam=T=>2501-2.361*T;                                   // kJ/kg, ±0.5% over 0-150C
+const Psat=T=>0.61121*Math.exp((18.678-T/234.5)*(T/(257.14+T)));  // kPa
+function Tsat(P){let lo=1,hi=250;for(let i=0;i<80;i++){const m=(lo+hi)/2;Psat(m)<P?lo=m:hi=m;}return (lo+hi)/2;}
+const cpJ=B=>4.187*(1-0.0057*B);
+const bpe=B=>1.65*B/(100-B);                                 // calibrated: 92 Brix -> 119C striking point
+const ncvBag=(w,s)=>18309-207.63*w-31.14*s;
+const K=t=>t+273.15;
+
+const DEFAULTS={ tpd:10, basis:"cane", hours:12, days:250,
+  extraction:65, bagMoist:48, bagPol:2, millKWh:15, trashLoss:0.5,
+  brixJuice:16, T0:30, heatClar:true, Tclar:85, scum:2, scumSugar:30,
+  effects:2, Pvac:15, brixMid:60, effEff:0.85, dTeff:8, dTapp:6,
+  brixFinal:92, panSource:"bagasse", panEff:30,
+  pheLoc:"afterClar", pinch:8, recEff:80,
+  hpSink:105, hpMatch:false, hpSrc:"waste", Tamb:30, srcFlow:12, carnot:0.48, motorEff:0.95,
+  mAir:12, vacEff:0.50, pumpKWh:6, ctKWh:2, autoKW:5,
+  tariff:8.5, bagRate:2.5, jagRate:45, gridCO2:0.71, convEff:28,
+  tol:1e-5, maxIter:80, damp:0.6 };
+
+function simulate(S){
+  const log=[], warn=[];
+  /* ---------- 1. MASS BALANCE (decoupled from energy) ---------- */
+  let Fcane = S.tpd*1000/S.hours;
+  if(S.basis==="jaggery"){                       // back-calculate cane from jaggery target
+    const y=(S.extraction/100)*(1-S.trashLoss/100)*(S.brixJuice/100)
+            *(1-(S.scum/100)*(S.scumSugar/100))/(S.brixFinal/100);
+    Fcane=S.tpd*1000/S.hours/y;
+  }
+  const mJuice=Fcane*S.extraction/100, mBag=Fcane-mJuice;
+  const solJ=mJuice*S.brixJuice/100;
+  const mScr=mJuice*(1-S.trashLoss/100), solScr=solJ*(1-S.trashLoss/100);
+  const mClar=mScr*(1-S.scum/100), solClar=solScr*(1-(S.scum/100)*(S.scumSugar/100));
+  const Bclar=solClar/mClar*100;
+  const mProd=solClar/(S.brixFinal/100);
+  const mMid=solClar/(S.brixMid/100);
+  const Wevap=mClar-mMid, Wpan=mMid-mProd, Wtot=mClar-mProd;
+
+  /* ---------- 2. TEMPERATURE SCHEME ---------- */
+  const TsatN=Tsat(S.Pvac);
+  const TN=TsatN+bpe(S.brixMid);                 // last effect boiling temp
+  const T1=TN+(S.effects-1)*S.dTeff;             // first effect boiling temp
+  const need=Math.max(T1+S.dTapp, S.panSource==="hp"?100+bpe(S.brixFinal)+S.dTapp:0);
+  const Thw=S.hpMatch? need : S.hpSink;          // fixed delivery, or matched to the evaporator
+  if(!S.hpMatch && Thw<T1+S.dTapp) warn.push(`Heat-pump delivery ${Thw.toFixed(0)}°C is below the ${(T1+S.dTapp).toFixed(0)}°C needed to drive effect 1 — raise sink temperature, deepen the vacuum, or reduce the number of effects.`);
+  const Tpan=100+bpe(S.brixFinal);
+  if(!S.hpMatch && S.panSource==="hp" && Thw<Tpan+S.dTapp) warn.push(`Finishing pan needs ${(Tpan+S.dTapp).toFixed(0)}°C; heat-pump delivers ${Thw.toFixed(0)}°C. Pan switched to bagasse would be feasible.`);
+
+  /* ---------- 3. RECYCLE SOLVE (tear: Tpre, Tsrc) ---------- */
+  let Tpre=S.T0+10, Tsrc=S.hpSrc==="air"?S.Tamb:S.Tamb+8, res=1, it=0, r=null;
+  const SE=S.effEff*S.effects;
+  for(it=1; it<=S.maxIter; it++){
+    /* clarification */
+    const Tclar = S.heatClar? S.Tclar : S.T0;
+    const Qclar = S.heatClar? mScr*cpJ(Bclar)*(S.Tclar-S.T0) : 0;
+    /* preheater placement */
+    let Tin, Qpre=0, Tphe_in, m_phe, B_phe;
+    if(S.pheLoc==="rawJuice"){ Tphe_in=S.T0; m_phe=mScr; B_phe=Bclar; }
+    else { Tphe_in=Tclar; m_phe=mClar; B_phe=Bclar; }
+    const Tpre_max=Tpre;                          // hot-water temp available this pass
+    const Tpre_out=Math.max(Tphe_in, Math.min(Tpre_max-S.pinch, T1));
+    Qpre=m_phe*cpJ(B_phe)*(Tpre_out-Tphe_in);
+    const TintoEvap = S.pheLoc==="rawJuice" ? (S.heatClar?Math.max(Tpre_out,S.Tclar):Tpre_out) : Tpre_out;
+    const QclarNet = S.pheLoc==="rawJuice" && S.heatClar
+      ? mScr*cpJ(Bclar)*Math.max(0,S.Tclar-Tpre_out) : Qclar;
+
+    /* evaporator — rigorous effect-by-effect cascade */
+    const flash = TintoEvap>T1 ? mClar*cpJ(Bclar)*(TintoEvap-T1)/lam(T1) : 0;
+    const Qsens = TintoEvap<T1 ? mClar*cpJ(Bclar)*(T1-TintoEvap) : 0;
+    const Ti=[]; for(let i=0;i<S.effects;i++) Ti.push(T1-i*S.dTeff);
+    const ratio=[1];
+    for(let i=1;i<S.effects;i++) ratio.push(ratio[i-1]*lam(Ti[i-1])*S.effEff/lam(Ti[i]));
+    const sumR=ratio.reduce((a,b)=>a+b,0);
+    const e1=Wevap/sumR;                       // total vapour leaving effect 1
+    const ev=ratio.map(x=>e1*x);               // vapour raised in each effect
+    const xExt=Math.max(0,e1-flash);           // portion of effect-1 vapour driven by the heat pump
+    const Qlatent=xExt*lam(T1)/S.effEff;
+    const Qevap=Qlatent+Qsens;
+    const reuseIn=ev.slice(0,-1).reduce((a,v,i)=>a+v*lam(Ti[i])*S.effEff,0);
+    const vapGen=ev.reduce((a,v,i)=>a+v*lam(Ti[i]),0);
+    const evapLoss=Math.max(0,Qlatent+reuseIn+flash*lam(T1)-vapGen);
+    const SEact=Wevap*lam(T1)/Math.max(1,Qlatent);
+    /* finishing pan */
+    const Qpan = mMid*cpJ(S.brixMid)*(Tpan-TN) + Wpan*lam(Tpan);
+    /* heat-pump duty */
+    const Qhp = Qevap + QclarNet + (S.panSource==="hp"?Qpan:0);
+    /* heat pump cycle */
+    const Tcond=Thw+S.dTapp, Tevap=Tsrc-S.dTapp;
+    let COP=S.carnot*K(Tcond)/Math.max(5,K(Tcond)-K(Tevap));
+    COP=Math.max(1.05,COP);
+    const Wcomp=Qhp/COP, Qsrc=Qhp-Wcomp;
+    /* heat recovery from evaporator vapour + condensate */
+    const vapLast=ev[ev.length-1];
+    const Trec=TN-S.pinch;
+    const condSens=(Wevap-vapLast)*4.187*Math.max(0,T1-Trec);
+    const Qrec=(S.recEff/100)*(vapLast*lam(TN)+condSens);
+    /* hot-water loop temperature returned to the preheater */
+    const mHW=Math.max(1,Qrec/(4.187*Math.max(1,Trec-S.T0)));
+    const Tpre_new=Trec;
+    /* heat-source loop for the heat pump */
+    let Tsrc_new;
+    if(S.hpSrc==="air"){ Tsrc_new=S.Tamb; }
+    else {
+      const msrc=S.srcFlow*1000;                  // m3/h -> kg/h
+      const Tin_src=S.hpSrc==="waste"? (mHW*Trec+msrc*S.Tamb)/(mHW+msrc) : S.Tamb;
+      const drop=Qsrc/((mHW+msrc)*4.187);
+      Tsrc_new=Tin_src-drop/2;
+    }
+    res=Math.max(Math.abs(Tpre_new-Tpre),Math.abs(Tsrc_new-Tsrc))/Math.max(1,Math.abs(Tpre_new));
+    Tpre+=S.damp*(Tpre_new-Tpre); Tsrc+=S.damp*(Tsrc_new-Tsrc);
+    r={Tclar,Tpre_out,TintoEvap,Qpre,QclarNet,flash,Qsens,Qevap,Qpan,Qhp,COP,Wcomp,Qsrc,
+       vapLast,Trec,Qrec,mHW,Tcond,Tevap,SE:SEact,Ti,ev,reuseIn,vapGen,evapLoss,Qlatent,xExt};
+    log.push({it,Tpre:Tpre_new,Tsrc:Tsrc_new,COP,Qhp,res});
+    if(res<S.tol) break;
+  }
+  const converged=res<S.tol;
+  if(!converged) warn.push(`Recycle loop did not converge in ${S.maxIter} iterations (residual ${res.toExponential(2)}). Increase iterations or lower damping.`);
+
+  /* ---------- 3b. BRIX / TEMPERATURE PROFILE ---------- */
+  const brixProfile=[{n:"Raw juice",B:S.brixJuice,T:S.T0,m:mJuice},
+                     {n:"Clarified",B:Bclar,T:r.Tclar,m:mClar},
+                     {n:"Preheated",B:Bclar,T:r.Tpre_out,m:mClar}];
+  let mRun=mClar;
+  r.ev.forEach((v,i)=>{ mRun-=v; brixProfile.push({n:"Effect "+(i+1),B:solClar/mRun*100,T:r.Ti[i],m:mRun}); });
+  brixProfile.push({n:"Pan out",B:S.brixFinal,T:Tpan,m:mProd});
+  brixProfile.push({n:"Moulded",B:S.brixFinal,T:45,m:mProd});
+
+  /* ---------- 4. UTILITIES ---------- */
+  const kwMill=Fcane/1000*S.millKWh;
+  const kwHP=r.Wcomp/3600/S.motorEff;
+  const Pat=101.325;   // vacuum pump: isothermal compression of air in-leakage
+  const kwVac=S.Pvac>=Pat?0:S.mAir*0.287*K(TN)*Math.log(Pat/Math.max(1,S.Pvac))/Math.max(.1,S.vacEff)/3600;
+  const kwPump=Fcane/1000*S.pumpKWh;
+  const Qreject=r.vapLast*lam(TN)*(1-S.recEff/100)/3600;      // kW rejected at the vapour condenser
+  const kwCT=Qreject*S.ctKWh/100;                              // fan + pump power, % of rejected duty
+  const kwTot=kwMill+kwHP+kwVac+kwPump+kwCT+S.autoKW;
+
+  /* bagasse */
+  const ncv=ncvBag(S.bagMoist,S.bagPol);
+  const bagPan=S.panSource==="bagasse"? (r.Qpan/(ncv*S.panEff/100)) : 0;
+  const bagSurplus=mBag-bagPan;
+  /* conventional open-pan reference */
+  const Qconv=Wtot*lam(100)+mClar*cpJ(Bclar)*(Tpan-S.T0);
+  const bagConv=Qconv/(ncv*S.convEff/100);
+
+  /* ---------- 5. BALANCE CLOSURE ---------- */
+  const massIn=Fcane, massOut=mBag+Wtot+mProd+(mJuice-mScr)+(mScr-mClar);
+  const massErr=(massIn-massOut)/massIn*100;
+  /* First-law audit over the whole juice train. Internal vapour reuse is inside the
+     boundary and is deliberately excluded; thermal losses come out as the balance. */
+  const condOut=(Wevap-r.vapLast)*4.187*T1;
+  const aIn=[["Juice enthalpy in (at "+S.T0+"°C)",mClar*cpJ(Bclar)*S.T0],
+             ["Clarifier heating",r.QclarNet],
+             ["Preheater — heat recovery",r.Qpre],
+             ["Evaporator effect 1 heating",r.Qevap],
+             ["Finishing pan heating",r.Qpan]];
+  const aOutKnown=[["Jaggery product",mProd*cpJ(S.brixFinal)*Tpan],
+              ["Vapour to condenser (last effect)",r.vapLast*(lam(TN)+4.187*TN)],
+              ["Condensate from effects 1…N−1",condOut],
+              ["Finishing pan vapour",Wpan*(lam(Tpan)+4.187*Tpan)]];
+  const enIn=aIn.reduce((a,x)=>a+x[1],0);
+  const enKnown=aOutKnown.reduce((a,x)=>a+x[1],0);
+  const losses=enIn-enKnown;
+  const aOut=aOutKnown.concat([["Thermal losses (by difference)",losses]]);
+  const enOut=enKnown+losses;
+  const lossPct=losses/Math.max(1,enIn)*100;
+  const enErr=(enIn-enOut)/Math.max(1,enIn)*100;
+
+  /* ---------- 6. ECONOMICS ---------- */
+  const hrs=S.hours*S.days;
+  const prodT=mProd*hrs/1000;
+  const elecYr=kwTot*hrs, elecCost=elecYr*S.tariff;
+  const bagYr=bagSurplus*hrs/1000, bagRev=bagYr*1000*S.bagRate;
+  const rev=prodT*S.jagRate*1000;
+  const co2=elecYr*S.gridCO2/1000;
+
+  return {Fcane,mJuice,mBag,mScr,mClar,solClar,Bclar,mProd,mMid,Wevap,Wpan,Wtot,
+    TsatN,TN,T1,Tpan,Thw,SE,r,log,it,res,converged,warn,
+    kwMill,kwHP,kwVac,kwPump,kwCT,kwTot,ncv,bagPan,bagSurplus,Qconv,bagConv,
+    Thw,need,brixProfile,massErr,enErr,lossPct,losses,aIn,aOut,Qreject,hrs,prodT,elecYr,elecCost,bagYr,bagRev,rev,co2,
+    secElec:kwTot/(mProd/1000), secWater:kwTot/(Wtot/1000), thermSEC:r.Qhp/Wtot};
+}
+
+
+/* ============================================================
+   STATE + HELPERS
+   ============================================================ */
+const S=Object.assign({view:"pfd",sweepVar:"Pvac",sweepLo:5,sweepHi:101,sweepN:17},DEFAULTS);
+const $=id=>document.getElementById(id);
+const fmt=(v,d=0)=>isFinite(v)?Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d}):"—";
+const kW=v=>fmt(v/3600,1);
+function rupee(v){
+  if(Math.abs(v)>=10000000) return "₹"+fmt(v/10000000,2)+" cr";
+  if(Math.abs(v)>=100000)   return "₹"+fmt(v/100000,2)+" lakh";
+  return "₹"+fmt(v,0);
+}
+let R=null;
+
+/* ============================================================
+   STREAM TABLE — every process stream in the flowsheet
+   ============================================================ */
+function streams(o){
+  const r=o.r, P0=101.3, Pv=S.Pvac;
+  const st=(id,name,m,T,P,B,phase,note)=>({id,name,m,T,P,B,
+    solids:m*(B||0)/100, phase, note,
+    H:m*(phase==="Vapour"? (lam(T)+4.187*T) : (B!==null? cpJ(B):4.187)*T)/3600});
+  const L=[];
+  L.push(st("S1","Sugarcane to mill",o.Fcane,S.T0,P0,null,"Solid","Feedstock"));
+  L.push(st("S2","Bagasse from mill",o.mBag,S.T0,P0,null,"Solid",S.bagMoist+"% moisture"));
+  L.push(st("S3","Raw juice",o.mJuice,S.T0,P0,S.brixJuice,"Liquid","To screen"));
+  L.push(st("S4","Trash / bagacillo",o.mJuice-o.mScr,S.T0,P0,S.brixJuice,"Solid","Screen reject"));
+  L.push(st("S5","Screened juice",o.mScr,S.T0,P0,S.brixJuice,"Liquid","To clarifier"));
+  L.push(st("S6","Scum / mud",o.mScr-o.mClar,r.Tclar,P0,S.brixJuice,"Slurry","Clarifier reject"));
+  L.push(st("S7","Clarified juice",o.mClar,r.Tclar,P0,o.Bclar,"Liquid","To preheater"));
+  L.push(st("S8","Preheated juice",o.mClar,r.Tpre_out,P0,o.Bclar,"Liquid","Heat recovery duty "+kW(r.Qpre)+" kW"));
+  L.push(st("S9","Juice to effect 1",o.mClar,r.TintoEvap,Psat(o.T1),o.Bclar,"Liquid",
+    r.flash>0.01?("Flashes "+fmt(r.flash,1)+" kg/h at inlet"):"Heated by heat pump"));
+  r.ev.forEach((v,i)=>L.push(st("V"+(i+1),"Vapour, effect "+(i+1),v,r.Ti[i],Psat(r.Ti[i]-bpe(S.brixMid)),0,"Vapour",
+    i<r.ev.length-1?"Heats effect "+(i+2):"To vapour condenser")));
+  L.push(st("S10","Condensate, effects 1…N−1",o.Wevap-r.vapLast,o.T1,Psat(o.T1),0,"Liquid","To heat recovery"));
+  L.push(st("S11","Concentrated juice",o.mMid,o.TN,Pv,S.brixMid,"Liquid","To finishing pan"));
+  L.push(st("S12","Finishing pan vapour",o.Wpan,o.Tpan,P0,0,"Vapour","Vented / condensed"));
+  L.push(st("S13","Jaggery at striking point",o.mProd,o.Tpan,P0,S.brixFinal,"Liquid","To cooling & moulding"));
+  L.push(st("S14","Jaggery blocks",o.mProd,45,P0,S.brixFinal,"Solid","Product"));
+  L.push(st("H1","Heat-pump hot water supply",Math.max(1,r.Qhp/(4.187*10)),S.hpSink,P0+50,null,"Liquid","Duty "+kW(r.Qhp)+" kW"));
+  L.push(st("H2","Heat-pump hot water return",Math.max(1,r.Qhp/(4.187*10)),S.hpSink-10,P0+50,null,"Liquid","10 K drop assumed"));
+  L.push(st("H3","Recovered hot water",r.mHW,r.Trec,P0,null,"Liquid","Duty "+kW(r.Qrec)+" kW"));
+  L.push(st("C1","Heat-source water to evaporator",S.hpSrc==="air"?0:S.srcFlow*1000,r.Tevap+S.dTapp,P0,null,
+    S.hpSrc==="air"?"Air":"Liquid",S.hpSrc==="air"?"Ambient air source":"Extracts "+kW(r.Qsrc)+" kW"));
+  L.push(st("C2","Cooling water to vapour condenser",Math.max(1,o.Qreject*3600/(4.187*8)),S.Tamb,P0,null,"Liquid","Rejects "+fmt(o.Qreject,1)+" kW"));
+  return L;
+}
+
+/* ============================================================
+   FLOWSHEET
+   ============================================================ */
+const CLR={juice:"#2E7D32",prod:"#8D5524",vap:"#6F7780",cond:"#1E6FB8",hot:"#C62828",cold:"#0288D1"};
+function defs(){
+  return `<defs>${Object.entries(CLR).map(([k,c])=>
+    `<marker id="m${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`).join("")}
+  <marker id="mgrey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6F7780"/></marker></defs>`;
+}
+function unit(n,x,y,w,h,title,sub,tone){
+  const c=tone||"#4A5350";
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="5" fill="#FFFFFF" stroke="${c}" stroke-width="1.4"/>
+<rect x="${x}" y="${y}" width="${w}" height="17" rx="5" fill="${c}"/><rect x="${x}" y="${y+11}" width="${w}" height="6" fill="${c}"/>
+<text class="sh" x="${x+7}" y="${y+12}" fill="#FFFFFF">${String(n).padStart(2,"0")}</text>
+<text class="sh" x="${x+w-7}" y="${y+12}" fill="#FFFFFF" text-anchor="end">${title.toUpperCase()}</text>
+${sub.filter(Boolean).map((s,i)=>`<text class="sv" x="${x+w/2}" y="${y+31+i*12}" text-anchor="middle">${s}</text>`).join("")}`;
+}
+function tag(x,y,id,lines,col){
+  const w=Math.max(58,...lines.map(l=>l.length*4.3+14)), h=11+lines.length*9.5;
+  return `<rect x="${x-w/2}" y="${y}" width="${w}" height="${h}" rx="3" fill="#FFFFFFEE" stroke="${col}" stroke-width=".9"/>
+<text class="sn" x="${x-w/2+5}" y="${y+9}" fill="${col}">${id}</text>
+${lines.map((l,i)=>`<text class="sv" x="${x+w/2-5}" y="${y+9+i*9.5}" text-anchor="end">${l}</text>`).join("")}`;
+}
+function arrowH(x1,x2,y,c,dash){return `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${c}" stroke-width="1.6" ${dash?'stroke-dasharray="5 3"':''} marker-end="url(#m${c===CLR.juice?"juice":c===CLR.prod?"prod":c===CLR.vap?"vap":c===CLR.cond?"cond":c===CLR.hot?"hot":"cold"})"/>`;}
+
+function svgPFD(o){
+  const r=o.r, W=1180, X0=12, GAP=14, BW=220, BH=62;
+  const Y1=34, TAG1=Y1+BH+6, Y2=150, TAG2=Y2+BH+6, HPY=264, HPH=98, UY=HPY+HPH+18, LY=UY+86;
+  const U=[["Sugarcane & crushing",["Cane "+fmt(o.Fcane,0)+" kg/h","Bagasse "+fmt(o.mBag,0)+" kg/h · "+fmt(S.bagMoist,0)+"% moisture","Mill "+fmt(o.kwMill,1)+" kW"],CLR.juice],
+   ["Juice collection & screening",["Juice "+fmt(o.mJuice,0)+" kg/h @ "+fmt(S.brixJuice,1)+" °Brix","Trash "+fmt(o.mJuice-o.mScr,1)+" kg/h",""],CLR.juice],
+   ["Clarification",[S.heatClar?("Heated to "+fmt(r.Tclar,0)+" °C · "+kW(r.QclarNet)+" kW"):"Unheated, at "+fmt(S.T0,0)+" °C",
+     "Scum "+fmt(o.mScr-o.mClar,1)+" kg/h","Clarified "+fmt(o.mClar,0)+" kg/h @ "+fmt(o.Bclar,1)+" °Bx"],CLR.juice],
+   ["Preheating — heat recovery",[kW(r.Qpre)+" kW recovered","Outlet "+fmt(r.Tpre_out,0)+" °C",
+     S.pheLoc==="rawJuice"?"On raw juice line":"After clarifier"],CLR.cond],
+   ["Heat-pump heating",[kW(r.Qevap)+" kW to effect 1","Hot water "+fmt(S.hpSink,0)+" °C","Juice to "+fmt(r.TintoEvap,0)+" °C"],CLR.hot],
+   ["Vacuum evaporation",[S.effects+" effects @ "+fmt(S.Pvac,0)+" kPa a","Boiling "+fmt(o.T1,1)+" → "+fmt(o.TN,1)+" °C",
+     "Economy "+fmt(r.SE,2)+(r.flash>0.05?" · flash "+fmt(r.flash,1)+" kg/h":"")],CLR.vap],
+   ["Concentration & finishing",[kW(r.Qpan)+" kW at "+fmt(o.Tpan,0)+" °C",
+     S.panSource==="hp"?"Heat-pump heated":"Bagasse fired, "+fmt(S.panEff,0)+"%","Evaporates "+fmt(o.Wpan,0)+" kg/h"],CLR.prod],
+   ["Cooling & moulding",["Product "+fmt(o.mProd,1)+" kg/h","Cooled to 45 °C",fmt(S.brixFinal,0)+" °Brix"],CLR.prod],
+   ["Packing & storage",[fmt(o.mProd*S.hours/1000,2)+" TPD",fmt(o.prodT,0)+" t/year","Yield "+fmt(o.mProd/o.Fcane*100,1)+"% on cane"],CLR.prod]];
+  let g=defs();
+  U.forEach((u,i)=>{
+    const row=i<5?0:1, col=i<5?i:i-5;
+    const x=X0+col*(BW+GAP), y=row?Y2:Y1;
+    g+=unit(i+1,x,y,BW,BH,u[0],u[1],u[2]);
+    const last=row?3:4;
+    if(col<last) g+=arrowH(x+BW+1,x+BW+GAP-1,y+BH/2,i<4?CLR.juice:i<6?CLR.juice:CLR.prod);
+  });
+  /* wrap from effect-5 outlet round to the evaporator */
+  const x5=X0+4*(BW+GAP);
+  g+=`<path d="M${x5+BW/2} ${Y1+BH} L${x5+BW/2} ${Y1+BH+44} L${X0+BW/2} ${Y1+BH+44} L${X0+BW/2} ${Y2-2}" fill="none" stroke="${CLR.juice}" stroke-width="1.7" marker-end="url(#mjuice)"/>`;
+  /* stream tags */
+  const gapc=n=>X0+n*(BW+GAP)-GAP/2;
+  g+=tag(gapc(1),TAG1,"S3",[fmt(o.mJuice,0)+" kg/h",fmt(S.brixJuice,1)+" °Bx"],CLR.juice);
+  g+=tag(gapc(3),TAG1,"S7",[fmt(o.mClar,0)+" kg/h",fmt(r.Tclar,0)+" °C"],CLR.juice);
+  g+=tag(gapc(4),TAG1,"S8",[fmt(o.mClar,0)+" kg/h",fmt(r.Tpre_out,0)+" °C"],CLR.cond);
+  g+=tag(gapc(1),TAG2,"S11",[fmt(o.mMid,0)+" kg/h",fmt(S.brixMid,0)+" °Bx",fmt(o.TN,0)+" °C"],CLR.prod);
+  g+=tag(gapc(2),TAG2,"S13",[fmt(o.mProd,1)+" kg/h",fmt(o.Tpan,0)+" °C"],CLR.prod);
+  g+=tag(gapc(3),TAG2,"S14",[fmt(o.mProd,1)+" kg/h",fmt(S.brixFinal,0)+" °Bx"],CLR.prod);
+  /* vapour off the evaporator to the recovery / vacuum side */
+  const xEv=X0+BW/2;
+  g+=`<path d="M${xEv} ${Y2+BH} L${xEv} ${TAG2+46}" fill="none" stroke="${CLR.vap}" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#mvap)"/>
+<text class="sl" x="${xEv-6}" y="${TAG2+30}" text-anchor="end" fill="${CLR.vap}">Vapour</text>
+<text class="sl" x="${xEv-6}" y="${TAG2+41}" text-anchor="end" fill="${CLR.vap}">${fmt(r.vapLast,0)} kg/h</text>`;
+
+  /* ---- heat pump cycle band ---- */
+  const HW=W-2*X0;
+  g+=`<rect x="${X0}" y="${HPY}" width="${HW}" height="${HPH}" rx="6" fill="#FDF6F4" stroke="${CLR.hot}" stroke-dasharray="6 4"/>
+<text class="sh" x="${X0+10}" y="${HPY+16}" fill="${CLR.hot}">HEAT PUMP CYCLE — HIGH TEMPERATURE</text>
+<text class="sl" x="${X0+HW-10}" y="${HPY+16}" text-anchor="end" fill="${CLR.hot}">Delivers ${kW(r.Qhp)} kW at ${fmt(S.hpSink,0)} °C · COP ${fmt(r.COP,2)}</text>`;
+  const cw=(HW-70)/4, cy=HPY+30;
+  [["Evaporator","Heat source side",["Evaporating "+fmt(r.Tevap,1)+" °C","Absorbs "+kW(r.Qsrc)+" kW"]],
+   ["Compressor","Electrical input",["Shaft "+kW(r.Wcomp)+" kW","Motor "+fmt(o.kwHP,1)+" kW"]],
+   ["Condenser","Heat delivery side",["Condensing "+fmt(r.Tcond,1)+" °C","Delivers "+kW(r.Qhp)+" kW"]],
+   ["Expansion valve","Pressure letdown",["Lift "+fmt(r.Tcond-r.Tevap,1)+" K","Carnot fraction "+fmt(S.carnot,2)]]
+  ].forEach((c,i)=>{
+    const x=X0+14+i*(cw+14);
+    g+=`<rect x="${x}" y="${cy}" width="${cw}" height="56" rx="4" fill="#FFF" stroke="${CLR.hot}" stroke-width="1.2"/>
+<text class="sb" x="${x+cw/2}" y="${cy+15}" text-anchor="middle" fill="${CLR.hot}">${c[0]}</text>
+<text class="sv" x="${x+cw/2}" y="${cy+26}" text-anchor="middle" fill="#7A8078">${c[1]}</text>
+${c[2].map((t,k)=>`<text class="sv" x="${x+cw/2}" y="${cy+38+k*10}" text-anchor="middle">${t}</text>`).join("")}`;
+    if(i<3) g+=`<line x1="${x+cw+2}" y1="${cy+28}" x2="${x+cw+12}" y2="${cy+28}" stroke="${CLR.hot}" stroke-width="1.4" marker-end="url(#mhot)"/>`;
+  });
+  g+=`<path d="M${X0+HW-14} ${cy+62} L${X0+HW-4} ${cy+62} L${X0+HW-4} ${cy+72} L${X0+18} ${cy+72} L${X0+18} ${cy+62}" fill="none" stroke="${CLR.cold}" stroke-width="1.3" marker-end="url(#mcold)"/>`;
+  /* hot water feed up to units 05 and 07 */
+  const u5=X0+4*(BW+GAP)+BW/2, u7=X0+(BW+GAP)+BW/2;
+  g+=`<path d="M${X0+HW-40} ${HPY} L${X0+HW-40} ${HPY-14} L${u5} ${HPY-14} L${u5} ${Y1+BH+2}" fill="none" stroke="${CLR.hot}" stroke-width="1.6" marker-end="url(#mhot)"/>`;
+  if(S.panSource==="hp") g+=`<path d="M${X0+HW-40} ${HPY-14} L${u7} ${HPY-14} L${u7} ${Y2+BH+2}" fill="none" stroke="${CLR.hot}" stroke-width="1.6" marker-end="url(#mhot)"/>`;
+  g+=`<text class="sl" x="${X0+HW-46}" y="${HPY-19}" text-anchor="end" fill="${CLR.hot}">Hot water ${fmt(S.hpSink,0)} °C</text>`;
+
+  /* ---- utility strip ---- */
+  const boxes=[
+    ["HEAT RECOVERY SYSTEM",CLR.cond,["Vapour condenser + plate exchanger","Recovers "+kW(r.Qrec)+" kW at "+fmt(S.recEff,0)+"% effectiveness",
+      "Hot water "+fmt(r.mHW,0)+" kg/h at "+fmt(r.Trec,0)+" °C","Feeds preheater and CIP"]],
+    ["VACUUM SYSTEM",CLR.vap,["Vapour to condenser "+fmt(r.vapLast,0)+" kg/h","Absolute pressure "+fmt(S.Pvac,0)+" kPa",
+      "Saturation "+fmt(o.TsatN,1)+" °C + BPE "+fmt(bpe(S.brixMid),1)+" K","Pump "+fmt(o.kwVac,1)+" kW"]],
+    ["COLD WATER SYSTEM",CLR.cold,["Cooling tower and cold-water tank","Rejects "+fmt(o.Qreject,1)+" kW",
+      "Fans and pumps "+fmt(o.kwCT,1)+" kW","Ambient "+fmt(S.Tamb,0)+" °C"]],
+    ["HEAT SOURCE (LOW GRADE)",CLR.cold,[S.hpSrc==="air"?"Ambient air":S.hpSrc==="waste"?"Condensate return + process waste heat":"Ground / borewell loop",
+      "Draws "+kW(r.Qsrc)+" kW","Supply "+fmt(r.Tevap+S.dTapp,1)+" °C","Circulation "+(S.hpSrc==="air"?"—":fmt(S.srcFlow,0)+" m³/h")]]];
+  const RW=(W-2*X0-3*GAP)/4;
+  boxes.forEach((b,i)=>{
+    const x=X0+i*(RW+GAP);
+    g+=`<rect x="${x}" y="${UY}" width="${RW}" height="74" rx="5" fill="#F8FAF9" stroke="${b[1]}" stroke-width="1.2"/>
+<text class="sh" x="${x+9}" y="${UY+16}" fill="${b[1]}">${b[0]}</text>
+${b[2].map((t,k)=>`<text class="sv" x="${x+9}" y="${UY+31+k*11}">${t}</text>`).join("")}`;
+  });
+  /* legend */
+  const leg=[["Juice",CLR.juice],["Product",CLR.prod],["Vapour",CLR.vap],["Condensate / recovery",CLR.cond],["Hot water",CLR.hot],["Cold water",CLR.cold]];
+  let lx=X0;
+  g+=leg.map(l=>{const t=`<line x1="${lx}" y1="${LY}" x2="${lx+22}" y2="${LY}" stroke="${l[1]}" stroke-width="2.2"/>
+<text class="sl" x="${lx+28}" y="${LY+3.5}">${l[0]}</text>`; lx+=l[0].length*5.4+52; return t;}).join("");
+  return `<svg viewBox="0 0 ${W} ${LY+16}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Process flow diagram of the heat-pump jaggery plant">${g}</svg>`;
+}
+
+/* ============================================================
+   CHART ENGINE — SVG line / bar plots
+   ============================================================ */
+function niceTicks(lo,hi,n){
+  if(!(isFinite(lo)&&isFinite(hi))||hi<=lo) return {lo:0,hi:1,ticks:[0,1]};
+  const raw=(hi-lo)/n, mag=Math.pow(10,Math.floor(Math.log10(raw))), norm=raw/mag;
+  const step=(norm<=1?1:norm<=2?2:norm<=5?5:10)*mag;
+  const t0=Math.floor(lo/step)*step, t1=Math.ceil(hi/step)*step, ticks=[];
+  for(let v=t0;v<=t1+step/2;v+=step) ticks.push(+v.toFixed(10));
+  return {lo:t0,hi:t1,ticks};
+}
+const tdec=t=>{const st=Math.abs(t.ticks[1]-t.ticks[0]);return st>=1?0:st>=0.1?1:st>=0.01?2:3;};
+function chart(c){
+  const W=c.w||560,H=c.h||250,ml=56,mr=c.yr?58:18,mt=26,mb=44;
+  const pw=W-ml-mr, ph=H-mt-mb;
+  const xs=c.x.vals, xlo=Math.min(...xs), xhi=Math.max(...xs);
+  const xt=niceTicks(xlo,xhi,5);
+  const L=c.series.filter(s=>s.axis!=="r"), Rr=c.series.filter(s=>s.axis==="r");
+  const ext=a=>{const v=a.flatMap(s=>s.vals).filter(isFinite);return v.length?[Math.min(...v),Math.max(...v)]:[0,1];};
+  const [l0,l1]=ext(L), yl=niceTicks(l0===l1?l0*0.9:l0,l0===l1?l0*1.1||1:l1,4);
+  const [r0,r1]=Rr.length?ext(Rr):[0,1], yr=niceTicks(r0===r1?r0*0.9:r0,r0===r1?r0*1.1||1:r1,4);
+  const px=v=>ml+(v-xt.lo)/(xt.hi-xt.lo)*pw;
+  const pyl=v=>mt+ph-(v-yl.lo)/(yl.hi-yl.lo)*ph;
+  const pyr=v=>mt+ph-(v-yr.lo)/(yr.hi-yr.lo)*ph;
+  let g="";
+  g+=`<rect x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="#FFFFFF" stroke="#C7CBC0"/>`;
+  yl.ticks.forEach(t=>{const y=pyl(t); if(y<mt-1||y>mt+ph+1)return;
+    g+=`<line x1="${ml}" y1="${y}" x2="${ml+pw}" y2="${y}" stroke="#E3E5DE"/>
+<text class="ax" x="${ml-7}" y="${y+3.2}" text-anchor="end">${fmt(t,tdec(yl))}</text>`;});
+  xt.ticks.forEach(t=>{const x=px(t); if(x<ml-1||x>ml+pw+1)return;
+    g+=`<line x1="${x}" y1="${mt}" x2="${x}" y2="${mt+ph}" stroke="#E3E5DE"/>
+<text class="ax" x="${x}" y="${mt+ph+14}" text-anchor="middle">${fmt(t,tdec(xt))}</text>`;});
+  if(Rr.length) yr.ticks.forEach(t=>{const y=pyr(t); if(y<mt-1||y>mt+ph+1)return;
+    g+=`<text class="ax" x="${ml+pw+7}" y="${y+3.2}" fill="${Rr[0].color}">${fmt(t,tdec(yr))}</text>`;});
+  c.series.forEach(s=>{
+    const py=s.axis==="r"?pyr:pyl;
+    const pts=s.vals.map((v,i)=>isFinite(v)?`${px(xs[i])},${py(v)}`:null).filter(Boolean);
+    if(s.type==="area") g+=`<polygon points="${ml},${mt+ph} ${pts.join(" ")} ${ml+pw},${mt+ph}" fill="${s.color}22"/>`;
+    g+=`<polyline points="${pts.join(" ")}" fill="none" stroke="${s.color}" stroke-width="2"
+      ${s.dash?'stroke-dasharray="6 4"':''} stroke-linejoin="round"/>`;
+    if(s.vals.length<=26) s.vals.forEach((v,i)=>{if(isFinite(v))
+      g+=`<circle cx="${px(xs[i])}" cy="${py(v)}" r="2.4" fill="#FFF" stroke="${s.color}" stroke-width="1.4"/>`;});
+    if(s.mark!==undefined && isFinite(s.mark))
+      g+=`<circle cx="${px(s.markX)}" cy="${py(s.mark)}" r="5" fill="none" stroke="${s.color}" stroke-width="2"/>`;
+  });
+  if(c.vline!==undefined){const x=px(c.vline);
+    g+=`<line x1="${x}" y1="${mt}" x2="${x}" y2="${mt+ph}" stroke="#8D5524" stroke-width="1.3" stroke-dasharray="4 3"/>
+<text class="ax" x="${x+4}" y="${mt+11}" fill="#8D5524">current case</text>`;}
+  g+=`<text class="axl" x="${ml+pw/2}" y="${H-8}" text-anchor="middle">${c.x.label}</text>
+<text class="axl" transform="translate(13,${mt+ph/2}) rotate(-90)" text-anchor="middle">${c.yl}</text>`;
+  if(c.yr) g+=`<text class="axl" transform="translate(${W-11},${mt+ph/2}) rotate(90)" text-anchor="middle" fill="${Rr[0].color}">${c.yr}</text>`;
+  let lx=ml;
+  g+=c.series.map(s=>{const t=`<line x1="${lx}" y1="${mt-11}" x2="${lx+16}" y2="${mt-11}" stroke="${s.color}" stroke-width="2.2" ${s.dash?'stroke-dasharray="5 3"':''}/>
+<text class="ax" x="${lx+21}" y="${mt-8}">${s.name}</text>`; lx+=s.name.length*5.1+34; return t;}).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${c.title||c.yl}">${g}</svg>`;
+}
+
+/* ============================================================
+   PARAMETRIC SWEEP
+   ============================================================ */
+const SWEEPS={
+  Pvac:{label:"Last-effect absolute pressure",unit:"kPa a",lo:5,hi:101,n:17,dec:0},
+  effects:{label:"Number of effects",unit:"",lo:1,hi:6,n:6,dec:0,int:true},
+  hpSink:{label:"Heat-pump delivery temperature",unit:"°C",lo:70,hi:140,n:15,dec:0},
+  brixMid:{label:"Evaporator outlet concentration",unit:"°Brix",lo:35,hi:85,n:11,dec:0},
+  brixJuice:{label:"Raw juice concentration",unit:"°Brix",lo:12,hi:22,n:11,dec:1},
+  effEff:{label:"Per-effect efficiency",unit:"",lo:0.70,hi:1.00,n:13,dec:2},
+  Tamb:{label:"Heat-source temperature",unit:"°C",lo:15,hi:45,n:13,dec:0}
+};
+function sweep(){
+  const cfg=SWEEPS[S.sweepVar], n=Math.max(2,Math.round(S.sweepN));
+  const lo=S.sweepLo, hi=S.sweepHi, out=[];
+  for(let i=0;i<n;i++){
+    let v=lo+(hi-lo)*i/(n-1);
+    if(cfg.int) v=Math.round(v);
+    const c=Object.assign({},S,{[S.sweepVar]:v});
+    if(S.sweepVar==="hpSink") c.hpMatch=false;   // an explicit sweep overrides matching
+    const q=simulate(c);
+    out.push({v,q});
+  }
+  return out.filter((x,i,a)=>i===0||x.v!==a[i-1].v);
+}
+
+/* ============================================================
+   CONSOLE
+   ============================================================ */
+const num=(id,lab,u,step,hint)=>`<div class="field"><label for="${id}">${lab}</label>
+<div class="unit"><input type="number" id="${id}" step="${step||1}">${u?`<span class="u">${u}</span>`:""}</div>
+${hint?`<div class="hint">${hint}</div>`:""}</div>`;
+const swx=(id,lab)=>`<label class="sw"><input type="checkbox" id="${id}"><span class="track"></span><span class="t">${lab}</span></label>`;
+
+const NUMF=["tpd","hours","days","extraction","bagMoist","bagPol","millKWh","trashLoss","brixJuice","T0",
+ "Tclar","scum","scumSugar","effects","Pvac","brixMid","effEff","dTeff","dTapp","brixFinal","panEff",
+ "pinch","recEff","hpSink","Tamb","srcFlow","carnot","motorEff","mAir","vacEff","pumpKWh","ctKWh","autoKW",
+ "tariff","bagRate","jagRate","gridCO2","convEff","maxIter","damp","sweepLo","sweepHi","sweepN"];
+const SWF=["heatClar","hpMatch"];
+
+function buildConsole(){
+  $("console").innerHTML=`
+  <div class="brand"><h1>JaggerySim</h1>
+    <div class="sub">Heat-pump jaggery plant · steady state</div>
+    <div class="strip"><i></i><i></i><i></i><i></i></div></div>
+
+  <div class="ledger">
+    <div class="status"><span class="dot" id="dot"></span><span class="txt" id="stxt"></span>
+      <span class="spark" id="spark"></span></div>
+    <div class="readout">
+      <div class="rd"><div class="k">Jaggery output</div><div class="v" id="rProd"></div></div>
+      <div class="rd"><div class="k">Connected power</div><div class="v" id="rPwr"></div></div>
+      <div class="rd acc"><div class="k">Heat-pump COP</div><div class="v" id="rCOP"></div></div>
+      <div class="rd acc"><div class="k">Specific energy</div><div class="v" id="rSEC"></div></div>
+    </div>
+    <div class="pwr"><div class="lab">Power draw by section</div>
+      <div class="pwrbar" id="pwrbar"></div><div class="pwrkey" id="pwrkey"></div></div>
+    <div class="warns" id="warns"></div>
+  </div>
+
+  <details class="sec" open><summary><span class="n">01</span>Basis &amp; capacity<span class="chev">›</span></summary><div class="body">
+    <div class="field"><label class="lbl">Capacity specified as</label>
+      <div class="seg" id="basisSeg"><button data-basis="cane">Cane crushed</button><button data-basis="jaggery">Jaggery produced</button></div></div>
+    <div class="row3">${num("tpd","Capacity","TPD",0.5)}${num("hours","Hours/day","h",1)}${num("days","Days/year","d",5)}</div>
+    ${num("T0","Ambient / juice inlet","°C",1)}
+  </div></details>
+
+  <details class="sec" open><summary><span class="n">02</span>Milling &amp; juice<span class="chev">›</span></summary><div class="body">
+    <div class="row">${num("extraction","Juice extraction","% cane",1)}${num("brixJuice","Juice concentration","°Brix",0.5)}</div>
+    <div class="row">${num("bagMoist","Bagasse moisture","%",1)}${num("bagPol","Bagasse pol","%",0.5)}</div>
+    <div class="row">${num("millKWh","Mill power","kWh/t",1)}${num("trashLoss","Screen loss","%",0.1)}</div>
+    <div class="hint">Extraction of 60–70% of cane mass is typical for a three-roller mill; juice at 15–18 °Brix.</div>
+  </div></details>
+
+  <details class="sec"><summary><span class="n">03</span>Clarification<span class="chev">›</span></summary><div class="body">
+    ${swx("heatClar","Heat the clarifier")}
+    <div class="row" style="margin-top:8px">${num("Tclar","Clarification temperature","°C",1)}${num("scum","Scum removed","% juice",0.5)}</div>
+    ${num("scumSugar","Sugar carried in scum","% of scum",1,"Lower values mean less sugar lost with the mud.")}
+  </div></details>
+
+  <details class="sec" open><summary><span class="n">04</span>Vacuum evaporation<span class="chev">›</span></summary><div class="body">
+    <div class="row">${num("effects","Number of effects","",1)}${num("Pvac","Last-effect pressure","kPa a",1)}</div>
+    <div class="row">${num("brixMid","Evaporator outlet","°Brix",1)}${num("dTeff","ΔT per effect","K",1)}</div>
+    <div class="row">${num("effEff","Per-effect efficiency","0–1",0.01)}${num("dTapp","Approach ΔT","K",1)}</div>
+    <div class="hint">Steam economy is solved from the effect cascade, not assumed. Per-effect efficiency covers radiation, venting and the boiling-point-elevation penalty.</div>
+  </div></details>
+
+  <details class="sec"><summary><span class="n">05</span>Finishing &amp; product<span class="chev">›</span></summary><div class="body">
+    ${num("brixFinal","Final jaggery","°Brix",0.5)}
+    <div class="field"><label class="lbl">Finishing pan heated by</label>
+      <div class="seg" id="panSeg"><button data-pan="bagasse">Bagasse furnace</button><button data-pan="hp">Heat pump</button></div></div>
+    ${num("panEff","Bagasse furnace efficiency","%",1)}
+  </div></details>
+
+  <details class="sec" open><summary><span class="n">06</span>Heat pump<span class="chev">›</span></summary><div class="body">
+    ${swx("hpMatch","Match delivery to the evaporator requirement")}
+    <div style="margin-top:8px" id="sinkWrap">${num("hpSink","Hot water delivery","°C",1)}</div>
+    <div class="field"><label class="lbl">Low-grade heat source</label>
+      <div class="seg" id="srcSeg"><button data-src="waste">Process waste heat</button><button data-src="air">Ambient air</button><button data-src="ground">Ground</button></div></div>
+    <div class="row">${num("Tamb","Source / ambient","°C",1)}${num("srcFlow","Source circulation","m³/h",1)}</div>
+    <div class="row">${num("carnot","Carnot efficiency","0–1",0.01)}${num("motorEff","Motor efficiency","0–1",0.01)}</div>
+    <div class="hint">COP = η<sub>Carnot</sub> · T<sub>cond</sub> / (T<sub>cond</sub> − T<sub>evap</sub>), in kelvin. A value of 0.45–0.50 is realistic for a high-temperature industrial machine.</div>
+  </div></details>
+
+  <details class="sec"><summary><span class="n">07</span>Heat recovery<span class="chev">›</span></summary><div class="body">
+    <div class="field"><label class="lbl">Preheater location</label>
+      <div class="seg" id="pheSeg"><button data-phe="afterClar">After clarifier (as drawn)</button><button data-phe="rawJuice">On raw juice line</button></div></div>
+    <div class="row">${num("recEff","Recovery effectiveness","%",1)}${num("pinch","Pinch / approach","K",1)}</div>
+  </div></details>
+
+  <details class="sec"><summary><span class="n">08</span>Utilities &amp; economics<span class="chev">›</span></summary><div class="body">
+    <div class="row">${num("mAir","Air in-leakage","kg/h",1)}${num("vacEff","Vacuum pump efficiency","0–1",0.05)}</div>
+    <div class="row">${num("pumpKWh","Process pumps","kWh/t cane",0.5)}${num("ctKWh","Cooling tower","% of duty",0.5)}</div>
+    <div class="row">${num("autoKW","Automation &amp; lighting","kW",0.5)}${num("tariff","Electricity","₹/kWh",0.25)}</div>
+    ${num("gridCO2","Grid CO₂","kg/kWh",0.01)}
+    <div class="row">${num("jagRate","Jaggery price","₹/kg",1)}${num("bagRate","Surplus bagasse","₹/kg",0.25)}</div>
+    ${num("convEff","Open-pan furnace efficiency","%",1,"Reference case: traditional bagasse-fired open-pan boiling.")}
+  </div></details>
+
+  <details class="sec" open><summary><span class="n">09</span>Parametric study<span class="chev">›</span></summary><div class="body">
+    <div class="field"><label for="sweepVar">Sweep variable</label><select id="sweepVar">
+      ${Object.keys(SWEEPS).map(k=>`<option value="${k}">${SWEEPS[k].label}${SWEEPS[k].unit?" ("+SWEEPS[k].unit+")":""}</option>`).join("")}
+    </select></div>
+    <div class="row3">${num("sweepLo","From","",1)}${num("sweepHi","To","",1)}${num("sweepN","Points","",1)}</div>
+    <div class="hint">Each point is solved as a complete flowsheet. Open the <strong>Parametric study</strong> tab to see the curves.</div>
+  </div></details>
+
+  <details class="sec"><summary><span class="n">10</span>Solver<span class="chev">›</span></summary><div class="body">
+    <div class="row">${num("maxIter","Maximum iterations","",5)}${num("damp","Damping factor","0–1",0.05)}</div>
+    <div class="hint">The heat-recovery and heat-source loops are torn and converged by damped successive substitution on preheat and source temperature.</div>
+  </div></details>
+
+  <div class="actions">
+    <button class="btn primary" id="btnPrint">Print / save as PDF</button>
+    <div class="btn-row"><button class="btn" id="btnCsv">Export CSV</button><button class="btn" id="btnRep">Full report (.doc)</button></div>
+    <div class="btn-row"><button class="btn ghost" id="btnSave">Save case</button><button class="btn ghost" id="btnLoad">Open case</button></div>
+    <input type="file" id="fileIn" accept=".json" hidden>
+    <button class="btn ghost" id="btnReset">Reset to defaults</button>
+  </div>
+  <div class="foot">Steady-state model for concept design and energy screening. Confirm evaporator surface, heat-pump selection and refrigerant limits with vendor data before committing to a design.</div>`;
+  wire(); sync();
+}
+
+function sync(){
+  NUMF.forEach(k=>{const e=$(k); if(e) e.value=S[k];});
+  SWF.forEach(k=>{const e=$(k); if(e) e.checked=S[k];});
+  if($("sweepVar")) $("sweepVar").value=S.sweepVar;
+  const sw=$("sinkWrap"); if(sw){sw.style.opacity=S.hpMatch?.45:1;sw.style.pointerEvents=S.hpMatch?"none":"auto";}
+  document.querySelectorAll("#basisSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.basis===S.basis));
+  document.querySelectorAll("#panSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pan===S.panSource));
+  document.querySelectorAll("#srcSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===S.hpSrc));
+  document.querySelectorAll("#pheSeg button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.phe===S.pheLoc));
+}
+function wire(){
+  NUMF.forEach(k=>{const e=$(k); if(!e)return;
+    e.addEventListener("input",()=>{const v=parseFloat(e.value);S[k]=isNaN(v)?0:v;run();});});
+  SWF.forEach(k=>{const e=$(k); if(!e)return; e.addEventListener("change",()=>{S[k]=e.checked;sync();run();});});
+  const seg=(sel,key,attr)=>document.querySelectorAll(sel).forEach(b=>b.addEventListener("click",()=>{S[key]=b.dataset[attr];sync();run();}));
+  if($("sweepVar")) $("sweepVar").addEventListener("change",e=>{
+    S.sweepVar=e.target.value; const c=SWEEPS[S.sweepVar];
+    S.sweepLo=c.lo; S.sweepHi=c.hi; S.sweepN=c.n; sync(); run();});
+  seg("#basisSeg button","basis","basis"); seg("#panSeg button","panSource","pan");
+  seg("#srcSeg button","hpSrc","src"); seg("#pheSeg button","pheLoc","phe");
+  $("btnPrint").addEventListener("click",()=>window.print());
+  $("btnCsv").addEventListener("click",exportCsv);
+  $("btnRep").addEventListener("click",exportDoc);
+  $("btnSave").addEventListener("click",()=>dl(new Blob([JSON.stringify(S,null,2)],{type:"application/json"}),stem()+".json"));
+  $("btnLoad").addEventListener("click",()=>$("fileIn").click());
+  $("fileIn").addEventListener("change",loadCase);
+  $("btnReset").addEventListener("click",()=>{if(confirm("Reset every input to its default value?"))location.reload();});
+}
+
+/* ---- ledger ---- */
+function ledger(o){
+  const ok=o.converged;
+  $("dot").className="dot"+(ok?"":" bad");
+  $("stxt").textContent=ok?`Converged · ${o.it} iterations · residual ${o.res.toExponential(1)}`
+                          :`Not converged · ${o.it} iterations · residual ${o.res.toExponential(1)}`;
+  const ls=o.log.slice(-24), mx=Math.max(...ls.map(x=>Math.log10(Math.max(1e-12,x.res))));
+  const mn=Math.min(...ls.map(x=>Math.log10(Math.max(1e-12,x.res))));
+  $("spark").innerHTML=ls.map(x=>{const v=(Math.log10(Math.max(1e-12,x.res))-mn)/Math.max(.001,mx-mn);
+    return `<i style="height:${Math.max(2,v*28)}px"></i>`;}).join("");
+  $("rProd").innerHTML=fmt(o.mProd*S.hours/1000,2)+"<small>TPD</small>";
+  $("rPwr").innerHTML=fmt(o.kwTot,0)+"<small>kW</small>";
+  $("rCOP").innerHTML=fmt(o.r.COP,2);
+  if(S.hpMatch && $("hpSink")) $("hpSink").value=fmt(o.Thw,1);
+  $("rSEC").innerHTML=fmt(o.secElec,0)+"<small>kWh/t</small>";
+  const parts=[["Mill",o.kwMill,CLR.juice],["Heat pump",o.kwHP,CLR.hot],["Vacuum",o.kwVac,CLR.vap],
+               ["Pumps",o.kwPump,CLR.cond],["Cooling",o.kwCT,CLR.cold],["Auto",S.autoKW,"#8D5524"]];
+  $("pwrbar").innerHTML=parts.map(p=>`<i style="width:${p[1]/o.kwTot*100}%;background:${p[2]}"></i>`).join("");
+  $("pwrkey").innerHTML=parts.map(p=>`<span><b style="background:${p[2]}"></b>${p[0]} ${fmt(p[1],1)} kW</span>`).join("");
+  const w=[...o.warn];
+  if(o.r.Qpre<1) w.push("Preheater is doing no work: the juice already enters it hotter than the recovered water. Try moving the preheater to the raw-juice line, or leave the clarifier unheated.");
+  if(o.bagSurplus<0) w.push("Bagasse demand exceeds what the mill produces — supplementary fuel would have to be bought.");
+  $("warns").innerHTML=w.map(t=>`<div class="wn${o.converged?"":" bad"}">${t}</div>`).join("");
+}
+
+/* ============================================================
+   RESULT VIEWS
+   ============================================================ */
+const H2=(n,t)=>`<h2><span class="no">${n}</span>${t}</h2>`;
+function caseHead(o){
+  return `<div style="display:flex;gap:22px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  text-transform:uppercase;color:#6F776C;border-top:1px solid #C7CBC0;border-bottom:1px solid #C7CBC0;padding:7px 0;margin-bottom:20px">
+  <span>Basis: ${fmt(S.tpd,1)} TPD ${S.basis==="cane"?"cane":"jaggery"}</span>
+  <span>${S.effects}-effect @ ${fmt(S.Pvac,0)} kPa</span>
+  <span>Heat pump ${fmt(S.hpSink,0)}°C</span>
+  <span>${o.converged?"Converged":"NOT CONVERGED"} · ${o.it} iter</span></div>`;
+}
+
+function viewPFD(o){
+  return `<h2 style="margin-top:0"><span class="no">PFD</span>Automated heat-pump jaggery plant — solved flowsheet</h2>
+${caseHead(o)}
+<div class="figure">${svgPFD(o)}</div>
+<div class="figcap">Figure 1 — Process flow diagram with converged stream and duty values</div>
+<div class="grid2">
+<div><h3>Material summary</h3><table><tbody>
+<tr><td>Cane crushed</td><td class="n">${fmt(o.Fcane,0)} kg/h</td></tr>
+<tr><td>Juice extracted</td><td class="n">${fmt(o.mJuice,0)} kg/h</td></tr>
+<tr><td>Clarified juice</td><td class="n">${fmt(o.mClar,0)} kg/h @ ${fmt(o.Bclar,1)} °Bx</td></tr>
+<tr><td>Water evaporated</td><td class="n">${fmt(o.Wtot,0)} kg/h</td></tr>
+<tr class="total"><td>Jaggery produced</td><td class="n">${fmt(o.mProd,1)} kg/h</td></tr>
+<tr><td>Yield on cane</td><td class="n">${fmt(o.mProd/o.Fcane*100,1)} %</td></tr>
+<tr><td>Bagasse produced</td><td class="n">${fmt(o.mBag,0)} kg/h</td></tr>
+</tbody></table></div>
+<div><h3>Thermal summary</h3><table><tbody>
+<tr><td>Effect 1 boiling / last effect</td><td class="n">${fmt(o.T1,1)} / ${fmt(o.TN,1)} °C</td></tr>
+<tr><td>Striking point (pan)</td><td class="n">${fmt(o.Tpan,1)} °C</td></tr>
+<tr><td>Steam economy achieved</td><td class="n">${fmt(o.r.SE,2)}</td></tr>
+<tr><td>Heat-pump duty</td><td class="n">${kW(o.r.Qhp)} kW</td></tr>
+<tr class="total"><td>Heat-pump COP</td><td class="n">${fmt(o.r.COP,2)}</td></tr>
+<tr><td>Heat recovered</td><td class="n">${kW(o.r.Qrec)} kW</td></tr>
+<tr><td>Thermal energy per kg water</td><td class="n">${fmt(o.thermSEC/1000,2)} MJ/kg</td></tr>
+</tbody></table></div></div>`;
+}
+
+function viewStreams(o){
+  const L=streams(o);
+  const rows=L.map(s=>`<tr><td class="n">${s.id}</td><td>${s.name}</td><td>${s.phase}</td>
+<td class="n">${fmt(s.m,1)}</td><td class="n">${fmt(s.T,1)}</td><td class="n">${fmt(s.P,1)}</td>
+<td class="n">${s.B===null?"—":fmt(s.B,1)}</td><td class="n">${s.B===null?"—":fmt(s.solids,1)}</td>
+<td class="n">${fmt(s.H,1)}</td><td class="fine">${s.note}</td></tr>`).join("");
+  return `<h2 style="margin-top:0"><span class="no">ST</span>Stream table</h2>${caseHead(o)}
+<table><thead><tr><th class="n">ID</th><th>Stream</th><th>Phase</th><th class="n">kg/h</th><th class="n">T °C</th>
+<th class="n">P kPa</th><th class="n">°Brix</th><th class="n">Solids kg/h</th><th class="n">H kW</th><th>Remark</th></tr></thead>
+<tbody>${rows}</tbody></table>
+<p class="fine">Enthalpy is referenced to liquid water at 0 °C. Juice specific heat follows c = 4.187(1 − 0.0057·B) kJ/kg·K;
+boiling-point elevation follows ΔT = 1.65·B/(100 − B) K, which puts the striking point at ${fmt(o.Tpan,0)} °C for ${fmt(S.brixFinal,0)} °Brix.
+Vapour pressures use the Buck correlation and latent heat λ = 2501 − 2.361·T kJ/kg.</p>`;
+}
+
+function viewEnergy(o){
+  const hrs=o.hrs;
+  const pw=[["Mill / crusher",o.kwMill],["Heat-pump compressor",o.kwHP],["Vacuum pump",o.kwVac],
+    ["Process pumps",o.kwPump],["Cooling tower",o.kwCT],["Automation &amp; lighting",S.autoKW]];
+  const elecRows=pw.map(p=>`<tr><td>${p[0]}</td><td class="n">${fmt(p[1],1)}</td><td class="n">${fmt(p[1]/o.kwTot*100,1)}</td>
+<td class="n">${fmt(p[1]*hrs,0)}</td></tr>`).join("");
+  const duty=[["Clarifier heating",o.r.QclarNet],["Preheater — recovered heat",o.r.Qpre],
+    ["Evaporator effect 1",o.r.Qevap],["Finishing pan",o.r.Qpan]];
+  const bagDef=o.bagConv-o.mBag;
+  return `<h2 style="margin-top:0"><span class="no">EN</span>Energy and economics</h2>${caseHead(o)}
+${H2("1","Electrical demand")}
+<table><thead><tr><th>Section</th><th class="n">kW</th><th class="n">% of total</th><th class="n">kWh/year</th></tr></thead>
+<tbody>${elecRows}
+<tr class="total"><td>Total</td><td class="n">${fmt(o.kwTot,1)}</td><td class="n">100.0</td><td class="n">${fmt(o.elecYr,0)}</td></tr></tbody></table>
+
+${H2("2","Thermal duties")}
+<table><thead><tr><th>Duty</th><th class="n">kW</th><th class="n">Supplied by</th></tr></thead><tbody>
+${duty.map((d,i)=>`<tr><td>${d[0]}</td><td class="n">${kW(d[1])}</td><td class="n">${
+  i===1?"Heat recovery":i===3&&S.panSource==="bagasse"?"Bagasse furnace":"Heat pump"}</td></tr>`).join("")}
+<tr class="total"><td>Heat-pump delivered duty</td><td class="n">${kW(o.r.Qhp)}</td><td class="n">COP ${fmt(o.r.COP,2)}</td></tr>
+<tr><td>Compressor shaft work</td><td class="n">${kW(o.r.Wcomp)}</td><td class="n">Electric</td></tr>
+<tr><td>Heat drawn from low-grade source</td><td class="n">${kW(o.r.Qsrc)}</td><td class="n">${
+  S.hpSrc==="air"?"Ambient air":S.hpSrc==="waste"?"Process waste heat":"Ground"}</td></tr>
+</tbody></table>
+
+${H2("3","Specific energy consumption")}
+<div class="grid2"><div><table><tbody>
+<tr><td>Per tonne of jaggery</td><td class="n">${fmt(o.secElec,0)} kWh/t</td></tr>
+<tr><td>Per tonne of water evaporated</td><td class="n">${fmt(o.secWater,0)} kWh/t</td></tr>
+<tr><td>Thermal energy per kg water</td><td class="n">${fmt(o.thermSEC/1000,2)} MJ/kg</td></tr>
+<tr><td>Steam economy</td><td class="n">${fmt(o.r.SE,2)}</td></tr>
+</tbody></table></div>
+<div><table><tbody>
+<tr><td>Annual electricity</td><td class="n">${fmt(o.elecYr/1000,0)} MWh</td></tr>
+<tr><td>Annual CO₂ from electricity</td><td class="n">${fmt(o.co2,1)} t</td></tr>
+<tr><td>Jaggery output</td><td class="n">${fmt(o.prodT,0)} t/year</td></tr>
+<tr><td>Operating hours</td><td class="n">${fmt(hrs,0)} h/year</td></tr>
+</tbody></table></div></div>
+
+${H2("4","Against a traditional open-pan furnace")}
+<table><thead><tr><th>Basis</th><th class="n">Open-pan, bagasse fired</th><th class="n">This plant</th></tr></thead><tbody>
+<tr><td>Thermal energy required</td><td class="n">${fmt(o.Qconv/3600,0)} kW</td><td class="n">${kW(o.r.Qhp+o.r.Qpre)} kW</td></tr>
+<tr><td>Furnace / cycle efficiency</td><td class="n">${fmt(S.convEff,0)} %</td><td class="n">COP ${fmt(o.r.COP,2)}</td></tr>
+<tr><td>Bagasse consumed</td><td class="n">${fmt(o.bagConv,0)} kg/h</td><td class="n">${fmt(o.bagPan,0)} kg/h</td></tr>
+<tr><td>Bagasse available from mill</td><td class="n">${fmt(o.mBag,0)} kg/h</td><td class="n">${fmt(o.mBag,0)} kg/h</td></tr>
+<tr class="total"><td>Bagasse balance</td><td class="n">${bagDef>0?"deficit "+fmt(bagDef,0):"surplus "+fmt(-bagDef,0)} kg/h</td>
+<td class="n">surplus ${fmt(o.bagSurplus,0)} kg/h</td></tr>
+<tr><td>Electricity</td><td class="n">${fmt(o.kwMill+S.autoKW,1)} kW</td><td class="n">${fmt(o.kwTot,1)} kW</td></tr>
+</tbody></table>
+<div class="callout"><span class="k">Reading this comparison</span>
+The heat pump replaces furnace heat with electricity at a COP of ${fmt(o.r.COP,2)}, so the plant draws
+${fmt(o.kwTot-o.kwMill-S.autoKW,0)} kW more electrically but frees ${fmt(o.mBag-o.bagPan,0)} kg/h of bagasse.
+Whether that trade is worth making depends on the local electricity tariff against the value of bagasse and of the
+better product quality that controlled low-temperature boiling gives.</div>
+
+${H2("5","Indicative operating economics")}
+<table><tbody>
+<tr><td>Jaggery revenue</td><td class="n">${rupee(o.rev)}/year</td></tr>
+<tr><td>Surplus bagasse value</td><td class="n">${rupee(o.bagRev)}/year</td></tr>
+<tr><td>Electricity cost</td><td class="n">−${rupee(o.elecCost)}/year</td></tr>
+<tr class="total"><td>Revenue less energy cost</td><td class="n">${rupee(o.rev+o.bagRev-o.elecCost)}/year</td></tr>
+<tr><td>Energy cost per kg jaggery</td><td class="n">₹${fmt(o.elecCost/Math.max(1,o.prodT*1000),2)}</td></tr>
+<tr><td>Energy as share of revenue</td><td class="n">${fmt(o.elecCost/Math.max(1,o.rev)*100,1)} %</td></tr>
+</tbody></table>
+<p class="fine">Cane cost, labour, chemicals, packaging, maintenance and capital charges are excluded — this is an energy
+comparison, not a project financial model.</p>`;
+}
+
+function viewConv(o){
+  const rows=o.log.map(x=>`<tr><td class="n">${x.it}</td><td class="n">${fmt(x.Tpre,3)}</td><td class="n">${fmt(x.Tsrc,3)}</td>
+<td class="n">${fmt(x.COP,4)}</td><td class="n">${fmt(x.Qhp/3600,2)}</td><td class="n">${x.res.toExponential(3)}</td></tr>`).join("");
+  const aud=(a,cls)=>a.map(x=>`<tr class="${cls||""}"><td>${x[0]}</td><td class="n">${fmt(x[1],0)}</td><td class="n">${fmt(x[1]/3600,2)}</td></tr>`).join("");
+  const enIn=o.aIn.reduce((a,x)=>a+x[1],0), enOut=o.aOut.reduce((a,x)=>a+x[1],0);
+  const mIn=[["Sugarcane",o.Fcane]];
+  const mOut=[["Bagasse",o.mBag],["Trash / bagacillo",o.mJuice-o.mScr],["Scum / mud",o.mScr-o.mClar],
+              ["Water evaporated",o.Wtot],["Jaggery",o.mProd]];
+  return `<h2 style="margin-top:0"><span class="no">CV</span>Convergence and balance closure</h2>${caseHead(o)}
+${H2("1","Recycle convergence")}
+<p>Two loops are torn and solved by damped successive substitution: the recovered-hot-water temperature feeding the
+preheater, and the heat-source temperature entering the heat-pump evaporator. Damping ${fmt(S.damp,2)}, tolerance ${DEFAULTS.tol.toExponential(0)}.</p>
+<table><thead><tr><th class="n">Iter</th><th class="n">T preheat °C</th><th class="n">T source °C</th><th class="n">COP</th>
+<th class="n">HP duty kW</th><th class="n">Residual</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="callout${o.converged?"":" warn"}"><span class="k">Solver status</span>
+${o.converged?`Converged in ${o.it} iterations to a residual of ${o.res.toExponential(2)}.`
+             :`Did not converge within ${S.maxIter} iterations; residual is ${o.res.toExponential(2)}. Lower the damping factor or raise the iteration limit.`}</div>
+
+${H2("2","Mass balance")}
+<table><thead><tr><th>Stream</th><th class="n">kg/h</th></tr></thead><tbody>
+${mIn.map(x=>`<tr><td>IN — ${x[0]}</td><td class="n">${fmt(x[1],2)}</td></tr>`).join("")}
+${mOut.map(x=>`<tr><td>OUT — ${x[0]}</td><td class="n">${fmt(x[1],2)}</td></tr>`).join("")}
+<tr class="total"><td>Closure error</td><td class="n">${fmt(o.massErr,6)} %</td></tr></tbody></table>
+
+${H2("3","First-law energy audit")}
+<p>Boundary encloses the whole juice train from clarified juice to moulded product. Vapour reused between effects is
+internal to the boundary and is excluded; thermal losses fall out as the balancing term.</p>
+<table><thead><tr><th>Term</th><th class="n">kJ/h</th><th class="n">kW</th></tr></thead><tbody>
+${aud(o.aIn)}<tr class="sub"><td>Total in</td><td class="n">${fmt(enIn,0)}</td><td class="n">${fmt(enIn/3600,2)}</td></tr>
+${aud(o.aOut)}<tr class="sub"><td>Total out</td><td class="n">${fmt(enOut,0)}</td><td class="n">${fmt(enOut/3600,2)}</td></tr>
+<tr class="total"><td>Closure error</td><td class="n">${fmt(o.enErr,6)} %</td><td class="n">—</td></tr></tbody></table>
+<div class="callout"><span class="k">Interpreting the loss term</span>
+Losses come to ${fmt(o.lossPct,1)}% of heat input, which follows from the per-effect efficiency of ${fmt(S.effEff,2)}
+you set in section 04. Setting that efficiency to 1.00 drives the loss term to near zero and the steam economy to the
+number of effects — a useful check that the model is behaving.</div>
+
+${H2("4","Model assumptions and limits")}
+<ul class="fine">
+<li>Steady state only. Batch behaviour of the finishing pan, start-up and shutdown are not represented.</li>
+<li>Juice is treated as a two-component water/solids mixture; inversion, colour formation and sucrose degradation are not modelled.</li>
+<li>Evaporator effects are equal-ΔT with a single per-effect efficiency; no heat-transfer area or fouling calculation is performed.</li>
+<li>Heat-pump COP is a Carnot fraction, not a refrigerant cycle calculation — check the delivery temperature against the working fluid's critical limits.</li>
+<li>Boiling-point elevation uses a single correlation calibrated to put the striking point near 119 °C; real cane juice varies with non-sugars.</li>
+<li>No pressure-drop, pump-head or equipment-sizing calculation. Vacuum and cooling loads are estimated from specific-consumption factors.</li>
+</ul>`;
+}
+
+/* ============================================================
+   PARAMETRIC STUDY VIEW
+   ============================================================ */
+function viewStudy(o){
+  const cfg=SWEEPS[S.sweepVar], D=sweep();
+  const xs=D.map(d=>d.v), Q=D.map(d=>d.q);
+  const xa={label:cfg.label+(cfg.unit?" ("+cfg.unit+")":""),vals:xs};
+  const cur=S[S.sweepVar];
+  const CH=(series,yl,yr,h)=>chart({x:xa,series,yl,yr,vline:cur,h:h||250,w:560});
+  const P=CLR;
+  const fig=(svg,cap)=>`<div class="figure">${svg}</div><div class="figcap">${cap}</div>`;
+
+  /* --- best point on total power --- */
+  let best=0; Q.forEach((q,i)=>{if(q.kwTot<Q[best].kwTot) best=i;});
+  const isVac=S.sweepVar==="Pvac";
+
+  const c1=CH([
+    {name:"Saturation temperature",vals:Q.map(q=>q.TsatN),color:P.cold},
+    {name:"Last effect boiling",vals:Q.map(q=>q.TN),color:P.vap,dash:1},
+    {name:"First effect boiling",vals:Q.map(q=>q.T1),color:P.hot},
+    {name:"Finishing pan",vals:Q.map(q=>q.Tpan),color:P.prod,dash:1}
+  ],"Temperature (°C)");
+
+  const c2=CH([
+    {name:"Water evaporated",vals:Q.map(q=>q.Wtot),color:P.cond,type:"area"},
+    {name:"Latent heat at effect 1",vals:Q.map(q=>lam(q.T1)),color:P.hot,axis:"r"}
+  ],"Water evaporated (kg/h)","Latent heat (kJ/kg)");
+
+  const c3=CH([
+    {name:"Heat-pump duty",vals:Q.map(q=>q.r.Qhp/3600),color:P.hot},
+    {name:"Heat recovered",vals:Q.map(q=>q.r.Qrec/3600),color:P.cond,dash:1},
+    {name:"Steam economy",vals:Q.map(q=>q.r.SE),color:P.juice,axis:"r"}
+  ],"Thermal duty (kW)","Steam economy");
+
+  const c4=CH([
+    {name:"Compressor power",vals:Q.map(q=>q.kwHP),color:P.hot},
+    {name:"Heat-pump COP",vals:Q.map(q=>q.r.COP),color:P.juice,axis:"r"}
+  ],"Compressor power (kW)","Heat-pump COP");
+  const c4b=CH([
+    {name:"Vacuum pump power",vals:Q.map(q=>q.kwVac),color:P.vap,type:"area"},
+    {name:"Heat-pump temperature lift",vals:Q.map(q=>q.r.Tcond-q.r.Tevap),color:P.hot,axis:"r"}
+  ],"Vacuum pump power (kW)","Lift, T cond − T evap (K)");
+
+  const c5=CH([
+    {name:"Total plant power",vals:Q.map(q=>q.kwTot),color:P.prod,type:"area"},
+    {name:"Specific energy",vals:Q.map(q=>q.secElec),color:P.juice,axis:"r"}
+  ],"Total power (kW)","kWh per tonne jaggery");
+
+  const c6=CH([
+    {name:"Energy cost",vals:Q.map(q=>q.elecCost/100000),color:P.hot},
+    {name:"CO₂ from electricity",vals:Q.map(q=>q.co2),color:P.vap,axis:"r"}
+  ],"Energy cost (₹ lakh/year)","CO₂ (t/year)");
+
+  /* --- Brix / temperature profile of the current case --- */
+  const bp=o.brixProfile;
+  const pw=560,ph=250,ml=54,mr=52,mt=26,mb=52,iw=pw-ml-mr,ih=ph-mt-mb;
+  const bw=iw/bp.length*0.62;
+  const Tmax=Math.max(...bp.map(p=>p.T))*1.1;
+  let pg=`<rect x="${ml}" y="${mt}" width="${iw}" height="${ih}" fill="#FFF" stroke="#C7CBC0"/>`;
+  [0,20,40,60,80,100].forEach(t=>{const y=mt+ih-t/100*ih;
+    pg+=`<line x1="${ml}" y1="${y}" x2="${ml+iw}" y2="${y}" stroke="#E3E5DE"/><text class="ax" x="${ml-7}" y="${y+3.2}" text-anchor="end">${t}</text>`;});
+  [0,40,80,120].forEach(t=>{const y=mt+ih-t/Tmax*ih; if(y<mt)return;
+    pg+=`<text class="ax" x="${ml+iw+7}" y="${y+3.2}" fill="${P.hot}">${t}</text>`;});
+  bp.forEach((p2,i)=>{
+    const cx=ml+iw*(i+0.5)/bp.length, h=p2.B/100*ih;
+    pg+=`<rect x="${cx-bw/2}" y="${mt+ih-h}" width="${bw}" height="${h}" fill="${P.juice}33" stroke="${P.juice}" stroke-width="1.2"/>
+<text class="ax" x="${cx}" y="${mt+ih-h-5}" text-anchor="middle" fill="${P.juice}">${fmt(p2.B,1)}</text>
+<text class="ax" transform="translate(${cx},${mt+ih+13}) rotate(-24)" text-anchor="end">${p2.n}</text>`;
+  });
+  pg+=`<polyline points="${bp.map((p2,i)=>`${ml+iw*(i+0.5)/bp.length},${mt+ih-p2.T/Tmax*ih}`).join(" ")}" fill="none" stroke="${P.hot}" stroke-width="2"/>`;
+  bp.forEach((p2,i)=>{const cx=ml+iw*(i+0.5)/bp.length,cy=mt+ih-p2.T/Tmax*ih;
+    pg+=`<circle cx="${cx}" cy="${cy}" r="2.6" fill="#FFF" stroke="${P.hot}" stroke-width="1.4"/>`;});
+  pg+=`<text class="axl" transform="translate(13,${mt+ih/2}) rotate(-90)" text-anchor="middle">Concentration (°Brix)</text>
+<text class="axl" transform="translate(${pw-11},${mt+ih/2}) rotate(90)" text-anchor="middle" fill="${P.hot}">Temperature (°C)</text>
+<line x1="${ml}" y1="${mt-11}" x2="${ml+16}" y2="${mt-11}" stroke="${P.juice}" stroke-width="2.2"/><text class="ax" x="${ml+21}" y="${mt-8}">°Brix</text>
+<line x1="${ml+90}" y1="${mt-11}" x2="${ml+106}" y2="${mt-11}" stroke="${P.hot}" stroke-width="2.2"/><text class="ax" x="${ml+111}" y="${mt-8}">Temperature</text>`;
+  const profile=`<svg viewBox="0 0 ${pw} ${ph}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brix and temperature profile">${pg}</svg>`;
+
+  const rows=D.map(d=>`<tr${d.v===cur?' class="sub"':''}><td class="n">${fmt(d.v,cfg.dec)}</td>
+<td class="n">${fmt(d.q.TsatN,1)}</td><td class="n">${fmt(d.q.T1,1)}</td><td class="n">${fmt(lam(d.q.T1),0)}</td>
+<td class="n">${fmt(d.q.Wtot,0)}</td><td class="n">${kW(d.q.r.Qhp)}</td><td class="n">${fmt(d.q.r.SE,2)}</td>
+<td class="n">${fmt(d.q.r.COP,2)}</td><td class="n">${fmt(d.q.kwVac,2)}</td><td class="n">${fmt(d.q.kwTot,1)}</td>
+<td class="n">${fmt(d.q.secElec,0)}</td><td class="n">${d.q.converged?"yes":"NO"}</td></tr>`).join("");
+
+  const lo=Q[0],hi=Q[Q.length-1];
+  return `<h2 style="margin-top:0"><span class="no">PS</span>Parametric study — ${cfg.label.toLowerCase()}</h2>
+${caseHead(o)}
+${isVac?`<p>Vacuum does not change <em>how much</em> water has to leave the juice — that is fixed by the mass balance
+between ${fmt(S.brixJuice,1)} °Brix feed and ${fmt(S.brixFinal,0)} °Brix product, and stays at
+<strong>${fmt(o.Wtot,0)} kg/h</strong> at every pressure below. What vacuum changes is the <em>temperature</em> at which
+that water leaves and therefore the <em>cost</em> of removing it.</p>`:""}
+
+${H2("1","Boiling temperature")}
+${fig(c1,"Figure 1 — Saturation and boiling temperatures against "+cfg.label.toLowerCase())}
+${isVac?`<p class="fine">Boiling-point elevation lifts each effect above the saturation temperature of the vapour space —
+${fmt(bpe(S.brixMid),1)} K at ${fmt(S.brixMid,0)} °Brix. The first effect sits ${fmt((S.effects-1)*S.dTeff,0)} K above the
+last because each effect must transfer heat into the next. The finishing pan is at atmospheric pressure and does not move.</p>`:""}
+
+${H2("2","Water removed and the energy it needs")}
+${fig(c2,"Figure 2 — Evaporation load (left) and latent heat of vaporisation (right)")}
+<div class="callout"><span class="k">The counter-intuitive part</span>
+Latent heat <em>rises</em> as pressure falls — from ${fmt(lam(hi.T1),0)} kJ/kg at the top of the range to
+${fmt(lam(lo.T1),0)} kJ/kg at the bottom. Each kilogram of water costs about
+${fmt((lam(lo.T1)/lam(hi.T1)-1)*100,1)}% more energy to evaporate under deep vacuum. Vacuum is not worth having for the
+latent heat — it is worth having for what the lower temperature does to the heat pump and to the product.</div>
+
+${H2("3","Thermal duty and steam economy")}
+${fig(c3,"Figure 3 — Heat-pump duty and recovered heat (left), steam economy (right)")}
+
+${H2("4","Electrical power and heat-pump performance")}
+${fig(c4,"Figure 4 — Compressor and vacuum-pump power (left), heat-pump COP (right)")}
+${S.sweepVar==="hpSink"&&S.hpMatch?`<div class="callout warn"><span class="k">Note</span>Delivery temperature is being swept explicitly, so <em>match delivery to the evaporator</em> is suspended for this study.</div>`:""}
+${isVac?`<p class="fine">${S.hpMatch
+ ?"Because heat-pump delivery is matched to the evaporator requirement, deeper vacuum lets the machine work across a smaller temperature lift, and COP climbs sharply."
+ :"Heat-pump delivery is fixed at "+fmt(S.hpSink,0)+" °C, so the compressor keeps lifting to the same temperature no matter how deep the vacuum, and COP barely moves. Turn on <em>Match delivery to evaporator</em> in section 06 to see the effect vacuum can actually buy you."}
+Vacuum-pump power is modelled as isothermal compression of ${fmt(S.mAir,0)} kg/h of air in-leakage from the
+evaporator pressure to atmosphere, so it rises steeply as pressure falls.</p>`:""}
+
+${H2("5","Vacuum pump load and heat-pump lift")}
+${fig(c4b,"Figure 5 — Vacuum-pump power (left) and the temperature lift the heat pump must cover (right)")}
+<p class="fine">These two curves pull in opposite directions and are the heart of the vacuum trade-off. Deeper vacuum
+shrinks the lift the compressor has to work across, which is where the saving comes from; it also makes the vacuum pump
+work harder against a larger pressure ratio, and raises the latent heat from Figure 2. Vacuum-pump power is small in
+absolute terms here — note the scale — so on this plant the lift term dominates.</p>
+
+${H2("6","Total plant demand")}
+${fig(c5,"Figure 6 — Total connected power and specific energy consumption")}
+<div class="callout"><span class="k">Lowest total power in this sweep</span>
+${fmt(xs[best],cfg.dec)} ${cfg.unit} → <strong>${fmt(Q[best].kwTot,1)} kW</strong>
+(${fmt(Q[best].secElec,0)} kWh per tonne of jaggery), against ${fmt(Q[0].kwTot,1)} kW at
+${fmt(xs[0],cfg.dec)} and ${fmt(Q[Q.length-1].kwTot,1)} kW at ${fmt(xs[xs.length-1],cfg.dec)} ${cfg.unit}.
+${isVac&&best>0&&best<Q.length-1
+ ?"The minimum is interior rather than at the deepest vacuum: below it the rising latent heat, the rising vacuum-pump load and the colder condensate returning to the heat-pump source outweigh what the lower boiling point saves."
+ :isVac&&best===0
+ ?"The minimum sits on the edge of the range swept, so the true optimum may lie deeper than "+fmt(xs[0],cfg.dec)+" "+cfg.unit+". Extend the range to find it — and check the result against what the evaporator and the vacuum set can actually hold."
+ :isVac&&best===Q.length-1
+ ?"The minimum sits at the shallow end of the range, so vacuum is not paying for itself in this configuration."
+ :""}</div>
+
+${H2("7","Energy cost and emissions")}
+${fig(c6,"Figure 7 — Annual electricity cost and CO₂ from electricity")}
+
+${H2("8","Concentration profile through the plant — current case")}
+${fig(profile,"Figure 8 — Juice concentration and temperature at each stage, "+fmt(S.effects,0)+" effects at "+fmt(S.Pvac,0)+" kPa")}
+<p class="fine">Concentration climbs from ${fmt(S.brixJuice,1)} °Brix in raw juice to ${fmt(S.brixMid,0)} °Brix at the
+evaporator outlet, and the finishing pan takes it the rest of the way to ${fmt(S.brixFinal,0)} °Brix. The last step
+removes only ${fmt(o.Wpan,0)} kg/h of water — ${fmt(o.Wpan/o.Wtot*100,0)}% of the total — but it does so at
+${fmt(o.Tpan,0)} °C, the hottest the juice ever gets and the stage that governs colour and sucrose inversion.</p>
+
+${H2("9","Sweep data")}
+<table><thead><tr><th class="n">${cfg.label}${cfg.unit?" ("+cfg.unit+")":""}</th><th class="n">T sat °C</th>
+<th class="n">T effect 1 °C</th><th class="n">λ kJ/kg</th><th class="n">Water kg/h</th><th class="n">HP duty kW</th>
+<th class="n">Economy</th><th class="n">COP</th><th class="n">Vac kW</th><th class="n">Total kW</th>
+<th class="n">kWh/t</th><th class="n">Conv.</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="fine">Every row is a full converged solution of the flowsheet, not an interpolation. The shaded row and the
+dashed line on each chart mark the case currently loaded in the inputs panel.</p>`;
+}
+
+/* ============================================================
+   RENDER · EXPORTS · INIT
+   ============================================================ */
+function run(){
+  R=simulate(S);
+  ledger(R);
+  $("sheet").innerHTML = S.view==="streams"?viewStreams(R) : S.view==="energy"?viewEnergy(R)
+                       : S.view==="study"?viewStudy(R) : S.view==="conv"?viewConv(R) : viewPFD(R);
+}
+function stem(){return "jaggerysim-"+fmt(S.tpd,0)+"tpd-"+S.effects+"eff-"+new Date().toISOString().slice(0,10);}
+function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},400);}
+function exportCsv(){
+  if(S.view==="study") return exportSweepCsv();
+  const o=R, q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const rows=[["JaggerySim — stream table"],["Basis",fmt(S.tpd,1)+" TPD "+S.basis],
+    ["Effects",S.effects],["Last-effect pressure kPa",S.Pvac],["Heat pump sink C",S.hpSink],
+    ["Converged",o.converged],["Iterations",o.it],["Residual",o.res],[],
+    ["ID","Stream","Phase","kg/h","T C","P kPa","Brix","Solids kg/h","H kW","Remark"]];
+  streams(o).forEach(s=>rows.push([s.id,s.name,s.phase,s.m.toFixed(2),s.T.toFixed(2),s.P.toFixed(2),
+    s.B===null?"":s.B.toFixed(2),s.B===null?"":s.solids.toFixed(2),s.H.toFixed(2),s.note]));
+  rows.push([],["Total power kW",o.kwTot.toFixed(2)],["COP",o.r.COP.toFixed(3)],
+    ["Steam economy",o.r.SE.toFixed(3)],["kWh per tonne jaggery",o.secElec.toFixed(0)],
+    ["Mass closure %",o.massErr.toFixed(6)],["Energy closure %",o.enErr.toFixed(6)]);
+  dl(new Blob(["\ufeff"+rows.map(r=>r.map(q).join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"}),stem()+"-streams.csv");
+}
+function exportSweepCsv(){
+  const cfg=SWEEPS[S.sweepVar], D=sweep(), q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const rows=[["JaggerySim — parametric study"],["Sweep variable",cfg.label+" "+cfg.unit],
+    ["Basis",fmt(S.tpd,1)+" TPD "+S.basis],["Effects",S.effects],["Heat pump",S.hpMatch?"matched to evaporator":"fixed "+S.hpSink+" C"],[],
+    [cfg.label+" "+cfg.unit,"Tsat C","T effect1 C","T last C","Latent kJ/kg","Water evaporated kg/h","HP duty kW",
+     "Steam economy","COP","Compressor kW","Vacuum kW","Total kW","kWh per t jaggery","Energy cost Rs/yr","CO2 t/yr","Converged"]];
+  D.forEach(d=>rows.push([d.v.toFixed(3),d.q.TsatN.toFixed(2),d.q.T1.toFixed(2),d.q.TN.toFixed(2),lam(d.q.T1).toFixed(0),
+    d.q.Wtot.toFixed(1),(d.q.r.Qhp/3600).toFixed(2),d.q.r.SE.toFixed(3),d.q.r.COP.toFixed(3),d.q.kwHP.toFixed(2),
+    d.q.kwVac.toFixed(3),d.q.kwTot.toFixed(2),d.q.secElec.toFixed(0),d.q.elecCost.toFixed(0),d.q.co2.toFixed(2),d.q.converged]));
+  dl(new Blob(["\ufeff"+rows.map(r=>r.map(q).join(",")).join("\r\n")],{type:"text/csv;charset=utf-8"}),stem()+"-sweep-"+S.sweepVar+".csv");
+}
+function exportDoc(){
+  const o=R;
+  const style=`<style>body{font-family:Calibri,sans-serif;font-size:10pt;line-height:1.45;color:#111}
+  h2{font-size:12pt;border-bottom:1pt solid #111;padding-bottom:3pt;margin:14pt 0 6pt}
+  h3{font-size:10.5pt;margin:10pt 0 4pt}
+  table{border-collapse:collapse;width:100%;font-size:8.5pt;margin:6pt 0 10pt}
+  th,td{border:.75pt solid #999;padding:3pt 5pt;text-align:left}th{background:#E8E8E4;font-weight:bold}
+  td.n,th.n{text-align:right}tr.total td,tr.sub td{background:#E8E8E4;font-weight:bold}
+  .callout{background:#EEF2EE;border-left:3pt solid #1FA37F;padding:6pt 9pt;margin:6pt 0}
+  .fine{font-size:8.5pt;color:#555}.no{color:#1FA37F;margin-right:6pt}.figure{border:.75pt solid #CCC;padding:6pt;margin:6pt 0}</style>`;
+  let body=`<h1>JaggerySim — heat-pump jaggery plant simulation</h1>${viewPFD(o)}${viewStreams(o)}${viewEnergy(o)}${viewStudy(o)}${viewConv(o)}`;
+  body=body.replace(/<svg[\s\S]*?<\/svg>/g,
+    '<p class="fine">[Diagram omitted — Word cannot render inline SVG reliably. Use <em>Print / save as PDF</em> for the drawn figures; the numbers behind them are in the tables below.]</p>');
+  dl(new Blob(["\ufeff<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'>"+style+"</head><body>"+body+"</body></html>"],
+    {type:"application/msword"}),stem()+"-report.doc");
+}
+function loadCase(e){
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{try{const d=JSON.parse(rd.result);Object.keys(d).forEach(k=>{if(k in S)S[k]=d[k];});
+    buildConsole();syncTabs();run();}catch(err){alert("Could not read that file. Choose a case file saved by JaggerySim.");}};
+  rd.readAsText(f); e.target.value="";
+}
+function syncTabs(){document.querySelectorAll("#viewTabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.view===S.view));}
+document.querySelectorAll("#viewTabs button").forEach(b=>b.addEventListener("click",()=>{S.view=b.dataset.view;syncTabs();run();}));
+$("mtCfg").addEventListener("click",()=>{document.body.className="v-cfg";$("mtCfg").setAttribute("aria-pressed","true");$("mtOut").setAttribute("aria-pressed","false");});
+$("mtOut").addEventListener("click",()=>{document.body.className="v-out";$("mtOut").setAttribute("aria-pressed","true");$("mtCfg").setAttribute("aria-pressed","false");});
+buildConsole(); syncTabs(); run();
+</script>
+</body>
+</html>
